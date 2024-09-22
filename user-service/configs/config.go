@@ -26,7 +26,7 @@ func LoadConfig() (Config, error) {
 	var config Config
 
 	// Load environment variables from the .env file
-	err := godotenv.Load("/Users/mbanhawy/dev/work/user-service/.env")
+	err := godotenv.Load("/Users/mbanhawy/dev/work/luka-platform/user-service/.env")
 
 	if err != nil {
 		log.Printf("Error loading .env file, relying on system environment variables: %s", err)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/devbenho/bazar-user-service/internal/dtos"
 	"github.com/devbenho/bazar-user-service/internal/repositories"
+	"github.com/devbenho/bazar-user-service/pkg/hasher"
 	"github.com/devbenho/bazar-user-service/pkg/tokens"
 	"github.com/devbenho/bazar-user-service/pkg/validation"
 )
@@ -21,6 +22,7 @@ type UserService struct {
 	validator validation.Validator
 	repo      repositories.IUserRepository
 	token     tokens.TokenService
+	hasher    hasher.Hasher
 }
 
 func (s *UserService) Login(ctx context.Context, dto *dtos.AuthDTO) (*dtos.AuthResponseDTO, error) {
@@ -51,11 +53,14 @@ func (s *UserService) DeleteUser(id string) error {
 func NewUserService(
 	validator *validation.Validator,
 	token *tokens.TokenService,
-	repo repositories.IUserRepository) *UserService {
+	repo repositories.IUserRepository,
+	hasher hasher.Hasher,
+) *UserService {
 	return &UserService{
 		validator: *validator,
 		repo:      repo,
 		token:     *token,
+		hasher:    hasher,
 	}
 }
 
@@ -72,7 +77,7 @@ func (s *UserService) Register(ctx context.Context, dto *dtos.CreateUserRequest)
 		Username: user.Username,
 		Role:     user.Role,
 	}
-	service := tokens.TokenService(s.token)
+	service := s.token
 	token, err := service.GenerateToken(payload)
 	if err != nil {
 		return nil, err
