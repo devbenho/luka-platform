@@ -2,6 +2,7 @@ package hasher
 
 import (
 	"golang.org/x/crypto/bcrypt"
+	"log"
 )
 
 type Hasher interface {
@@ -19,6 +20,7 @@ type hasher struct {
 
 func (h *hasher) Hash(password string) (string, error) {
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	log.Println("Hahshing password ", password, " to ", string(hashedPassword))
 	return string(hashedPassword), nil
 
 }

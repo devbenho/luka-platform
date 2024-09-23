@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/devbenho/bazar-user-service/api/errors"
 	"github.com/devbenho/bazar-user-service/api/handlers"
 	"github.com/devbenho/bazar-user-service/api/middlewares"
 	configs "github.com/devbenho/bazar-user-service/configs"
@@ -42,7 +43,7 @@ func main() {
 
 	// Setup routes
 	mux := http.NewServeMux()
-	mux.HandleFunc("/user", userHandler.Register)
+	mux.HandleFunc("/user", errors.Make(userHandler.Register))
 	mux.HandleFunc("/user/login", userHandler.Login)
 	mux.HandleFunc("/user/get", userHandler.GetUserByID)
 	mux.HandleFunc("/user/update", userHandler.UpdateUser)

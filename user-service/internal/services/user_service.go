@@ -2,11 +2,13 @@ package services
 
 import (
 	"context"
+	"errors"
 	"github.com/devbenho/bazar-user-service/internal/dtos"
 	"github.com/devbenho/bazar-user-service/internal/repositories"
 	"github.com/devbenho/bazar-user-service/pkg/hasher"
 	"github.com/devbenho/bazar-user-service/pkg/tokens"
 	"github.com/devbenho/bazar-user-service/pkg/validation"
+	"log"
 )
 
 type IUserService interface {
@@ -26,8 +28,45 @@ type UserService struct {
 }
 
 func (s *UserService) Login(ctx context.Context, dto *dtos.AuthDTO) (*dtos.AuthResponseDTO, error) {
-	//TODO implement me
-	panic("implement me")
+	isExist, err := s.IsUserExists(dto.Login)
+	if err != nil {
+		return nil, err
+	}
+	if !isExist {
+		return nil, errors.New("user not found")
+	}
+
+	user, err := s.repo.GetUserByUsername(dto.Login)
+	if err != nil {
+		user, err = s.repo.GetUserByEmail(dto.Login)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	log.Println("user is ", user.Password)
+	log.Println("dto is ", dto.Password)
+
+	log.Print("res is ", err)
+	if s.hasher.Compare(user.Password, dto.Password); err != nil {
+		return nil, errors.New("invalid password")
+	}
+
+	payload := tokens.JWTPayload{
+		Username: user.Username,
+		Role:     user.Role,
+	}
+
+	token, err := s.token.GenerateToken(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	return &dtos.AuthResponseDTO{
+		Email: user.Email,
+		Token: token.Token,
+	}, nil
+
 }
 
 func (s *UserService) GetUserByID(id string) (*dtos.UserResponseDTO, error) {
@@ -36,8 +75,14 @@ func (s *UserService) GetUserByID(id string) (*dtos.UserResponseDTO, error) {
 }
 
 func (s *UserService) IsUserExists(login string) (bool, error) {
-	//TODO implement me
-	panic("implement me")
+	_, err := s.repo.GetUserByUsername(login)
+	if err != nil {
+		_, err = s.repo.GetUserByEmail(login)
+		if err != nil {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func (s *UserService) UpdateUser(id string, user *dtos.UpdateUserRequest) (*dtos.UserResponseDTO, error) {
@@ -69,6 +114,7 @@ func (s *UserService) Register(ctx context.Context, dto *dtos.CreateUserRequest)
 		return nil, err
 	}
 
+	dto.Password, _ = s.hasher.Hash(dto.Password)
 	user := dto.ToUser()
 	if err := s.repo.CreateUser(user); err != nil {
 		return nil, err

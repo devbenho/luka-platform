@@ -18,10 +18,34 @@ type IUserRepository interface {
 	IsUserExists(login string) (bool, error)
 	UpdateUser(id string, user *models.User) error
 	DeleteUser(id string) error
+	GetUserByEmail(email string) (*models.User, error)
+	GetUserByUsername(username string) (*models.User, error)
 }
 
 type userRepository struct {
 	collection *mongo.Collection
+}
+
+func (r *userRepository) GetUserByEmail(email string) (*models.User, error) {
+	user := &models.User{}
+
+	filter := bson.M{"email": email}
+	err := r.collection.FindOne(context.Background(), filter).Decode(user)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+func (r *userRepository) GetUserByUsername(username string) (*models.User, error) {
+	user := &models.User{}
+
+	filter := bson.M{"username": username}
+	err := r.collection.FindOne(context.Background(), filter).Decode(user)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
 }
 
 func NewUserRepository(db *mongo.Database) IUserRepository {
@@ -103,7 +127,11 @@ func (r *userRepository) DeleteUser(id string) error {
 
 // IsUserExists checks if a user with the given login already exists in the database
 func (r *userRepository) IsUserExists(login string) (bool, error) {
-	filter := bson.M{"username": login}
+	// login maybe the email or username
+	filter := bson.M{"$or": []bson.M{
+		{"email": login},
+		{"username": login},
+	}}
 	count, err := r.collection.CountDocuments(context.Background(), filter)
 	if err != nil {
 		return false, err

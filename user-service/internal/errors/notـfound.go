@@ -1,4 +1,4 @@
-package exceptions
+package errors
 
 // NotFound is a struct that represents the not found exception.
 type NotFound struct {
