@@ -1,9 +1,13 @@
 package main
 
 import (
-	"github.com/devbenho/bazar-user-service/api/errors"
-	"github.com/devbenho/bazar-user-service/api/handlers"
-	"github.com/devbenho/bazar-user-service/api/middlewares"
+	"log"
+	"net/http"
+
+	"github.com/devbenho/bazar-user-service/ports/api/errors"
+	"github.com/devbenho/bazar-user-service/ports/api/handlers"
+	"github.com/devbenho/bazar-user-service/ports/api/middlewares"
+
 	configs "github.com/devbenho/bazar-user-service/configs"
 	"github.com/devbenho/bazar-user-service/internal/database"
 	"github.com/devbenho/bazar-user-service/internal/repositories"
@@ -11,9 +15,8 @@ import (
 	"github.com/devbenho/bazar-user-service/pkg/hasher"
 	"github.com/devbenho/bazar-user-service/pkg/tokens"
 	"github.com/devbenho/bazar-user-service/pkg/validation"
+
 	httpSwagger "github.com/swaggo/http-swagger"
-	"log"
-	"net/http"
 )
 
 func main() {
@@ -23,15 +26,7 @@ func main() {
 		log.Fatalf("Error loading configuration: %v", err)
 	}
 
-	// Connect to the database
-	if err := database.Connect(); err != nil {
-		log.Fatalf("Error connecting to the database: %v", err)
-	}
-	defer func() {
-		if err := database.Disconnect(); err != nil {
-			log.Printf("Error disconnecting from the database: %v", err)
-		}
-	}()
+	initDB()
 
 	// Initialize dependencies
 	validator := validation.NewValidator()
@@ -43,7 +38,8 @@ func main() {
 
 	// Setup routes
 	mux := http.NewServeMux()
-	mux.HandleFunc("/user", errors.Make(userHandler.Register))
+	mux.HandleFunc("/user", errors.ErrorHandler(userHandler.Register))
+
 	mux.HandleFunc("/user/login", userHandler.Login)
 	mux.HandleFunc("/user/get", userHandler.GetUserByID)
 	mux.HandleFunc("/user/update", userHandler.UpdateUser)
@@ -57,4 +53,15 @@ func main() {
 	if err := http.ListenAndServe(":"+cfg.App.Port, middlewares.ErrorMiddleware(mux)); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func initDB() {
+	if err := database.Connect(); err != nil {
+		if dbErr, ok := err.(*database.DBConnectionError); ok {
+			log.Fatalf("Custom error occurred: %s\n", dbErr.Error())
+		} else {
+			log.Fatalf("An error occurred: %s\n", err.Error())
+		}
+	}
+
 }

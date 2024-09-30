@@ -2,12 +2,14 @@ package services
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"github.com/devbenho/bazar-user-service/internal/dtos"
 	"github.com/devbenho/bazar-user-service/internal/repositories"
+	"github.com/devbenho/bazar-user-service/pkg/errors"
 	"github.com/devbenho/bazar-user-service/pkg/hasher"
 	"github.com/devbenho/bazar-user-service/pkg/tokens"
 	"github.com/devbenho/bazar-user-service/pkg/validation"
+	"github.com/go-playground/validator/v10"
 	"log"
 )
 
@@ -108,17 +110,25 @@ func NewUserService(
 		hasher:    hasher,
 	}
 }
-
 func (s *UserService) Register(ctx context.Context, dto *dtos.CreateUserRequest) (*dtos.CreateUserResponse, error) {
 	if err := s.validator.ValidateStruct(dto); err != nil {
+		if validationErrors, ok := err.(validator.ValidationErrors); ok {
+
+			validationErrorsResult := convertValidationErrors(validationErrors)
+
+			return nil, validationErrorsResult
+		}
 		return nil, err
 	}
 
 	dto.Password, _ = s.hasher.Hash(dto.Password)
 	user := dto.ToUser()
+
 	if err := s.repo.CreateUser(user); err != nil {
 		return nil, err
 	}
+
+	log.Println(`User created successfully`)
 	payload := tokens.JWTPayload{
 		Username: user.Username,
 		Role:     user.Role,
@@ -133,4 +143,14 @@ func (s *UserService) Register(ctx context.Context, dto *dtos.CreateUserRequest)
 		ID:    user.ID.Hex(),
 		Token: token,
 	}, nil
+}
+
+func convertValidationErrors(validationErrors validator.ValidationErrors) errors.ValidationErrors {
+	var customErrors errors.ValidationErrors
+	for _, e := range validationErrors {
+		newError := errors.NewValidationError(e.Field(), e.Tag(), fmt.Sprintf("%v", e.Value()))
+		customErrors = append(customErrors, newError)
+	}
+
+	return customErrors
 }

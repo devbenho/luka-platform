@@ -56,7 +56,7 @@ func NewUserRepository(db *mongo.Database) IUserRepository {
 
 // CreateUser inserts a new user into the database
 func (r *userRepository) CreateUser(user *models.User) error {
-	user.ID = primitive.NewObjectID() // Generate a new ObjectID for MongoDB
+	user.ID = primitive.NewObjectID()
 	user.CreatedAt = time.Now()
 	user.UpdatedAt = time.Now()
 

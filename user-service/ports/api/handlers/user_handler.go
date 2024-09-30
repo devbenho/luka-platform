@@ -2,10 +2,9 @@ package handlers
 
 import (
 	"encoding/json"
-	"github.com/devbenho/bazar-user-service/api/errors"
-	"github.com/devbenho/bazar-user-service/internal/utils"
-	"log"
 	"net/http"
+
+	"github.com/devbenho/bazar-user-service/internal/utils"
 
 	"github.com/devbenho/bazar-user-service/internal/dtos"
 	"github.com/devbenho/bazar-user-service/internal/services"
@@ -37,23 +36,18 @@ func (h *UserHandler) Register(w http.ResponseWriter, r *http.Request) error {
 	var createUserRequest dtos.CreateUserRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&createUserRequest); err != nil {
-		log.Print("Invalid JSON Request Data")
-		return errors.InvalidJSON()
+		return err
 	}
 
 	result, err := h.service.Register(r.Context(), &createUserRequest)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		response := utils.NewErrorResponse(500, "error", err.Error())
-		json.NewEncoder(w).Encode(response)
-		return errors.NewAPIError(err, http.StatusInternalServerError)
+		return err
 	}
 
-	response := utils.NewSuccessResponse(200, "User registered successfully", result)
+	response := utils.NewSuccessResponse(http.StatusCreated, "User registered successfully", result)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(response)
-	return nil
+	return json.NewEncoder(w).Encode(response)
 }
 
 // Login handles user login requests

@@ -3,9 +3,9 @@ POST http://localhost:8000/user
 Content-Type: application/json
 
 {
-  "username": "benho",
-  "password": "securepassword",
-  "email": "me@benho.dev",
+  "username": "benho1",
+  "password": "securepas1sword",
+  "email": "meenh@o.dev",
   "role": "seller"
 }
 
