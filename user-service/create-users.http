@@ -6,7 +6,7 @@ Content-Type: application/json
   "username": "benho1",
   "password": "securepas1sword",
   "email": "meenh@o.dev",
-  "role": "seller"
+  "role": "buyer"
 }
 
 ### Get a user by ID

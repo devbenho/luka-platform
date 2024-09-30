@@ -3,12 +3,14 @@ package repositories
 import (
 	"context"
 	"errors"
+	"time"
+
+	"github.com/devbenho/bazar-user-service/internal/database"
 	"github.com/devbenho/bazar-user-service/internal/models"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"time"
 )
 
 // IUserRepository defines the methods that any repository implementation must have.
@@ -60,8 +62,11 @@ func (r *userRepository) CreateUser(user *models.User) error {
 	user.CreatedAt = time.Now()
 	user.UpdatedAt = time.Now()
 
-	_, err := r.collection.InsertOne(context.TODO(), user)
+	_, err := r.collection.InsertOne(context.TODO(), user) // use = instead of :=
 	if err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return &database.DBDuplicateError{Entity: "User", Field: "username or email", Value: user.Username + " or " + user.Email}
+		}
 		return err
 	}
 	return nil

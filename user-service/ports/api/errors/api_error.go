@@ -3,6 +3,7 @@ package errors
 import (
 	"net/http"
 
+	"github.com/devbenho/bazar-user-service/internal/database"
 	"github.com/devbenho/bazar-user-service/pkg/errors"
 )
 
@@ -29,7 +30,7 @@ func MapErrorToHTTP(err error) *APIError {
 		return NewAPIError(http.StatusUnauthorized, e.Error())
 	case *errors.InternalServerError:
 		return NewAPIError(http.StatusInternalServerError, e.Error())
-	case *errors.ConflictError:
+	case *errors.ConflictError, *database.DBDuplicateError:
 		return NewAPIError(http.StatusConflict, e.Error())
 	case *errors.BadRequestError:
 		return NewAPIError(http.StatusBadRequest, e.Error())

@@ -35,7 +35,7 @@ func (s *UserService) Login(ctx context.Context, dto *dtos.AuthDTO) (*dtos.AuthR
 		return nil, err
 	}
 	if !isExist {
-		return nil, errors.New("user not found")
+		return nil, err
 	}
 
 	user, err := s.repo.GetUserByUsername(dto.Login)
@@ -46,12 +46,9 @@ func (s *UserService) Login(ctx context.Context, dto *dtos.AuthDTO) (*dtos.AuthR
 		}
 	}
 
-	log.Println("user is ", user.Password)
-	log.Println("dto is ", dto.Password)
-
 	log.Print("res is ", err)
 	if s.hasher.Compare(user.Password, dto.Password); err != nil {
-		return nil, errors.New("invalid password")
+		return nil, errors.NewValidationError("password", "invalid", "password is invalid")
 	}
 
 	payload := tokens.JWTPayload{
@@ -112,8 +109,9 @@ func NewUserService(
 }
 func (s *UserService) Register(ctx context.Context, dto *dtos.CreateUserRequest) (*dtos.CreateUserResponse, error) {
 	if err := s.validator.ValidateStruct(dto); err != nil {
+		log.Print("err is ", err)
 		if validationErrors, ok := err.(validator.ValidationErrors); ok {
-
+			log.Println("lll")
 			validationErrorsResult := convertValidationErrors(validationErrors)
 
 			return nil, validationErrorsResult
