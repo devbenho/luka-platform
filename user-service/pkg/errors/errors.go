@@ -33,10 +33,12 @@ func (e ValidationErrors) Error() string {
 // NotFoundError represents a not found error
 type NotFoundError struct {
 	Entity string
+	Field  string
+	Value  string
 }
 
 func (e *NotFoundError) Error() string {
-	return fmt.Sprintf("%s not found", e.Entity)
+	return fmt.Sprintf("%s not found with %s %s", e.Entity, e.Field, e.Value)
 }
 
 // UnauthorizedError represents an unauthorized access error
@@ -73,4 +75,10 @@ type BadRequestError struct {
 
 func (e *BadRequestError) Error() string {
 	return fmt.Sprintf("bad request: %s", e.Message)
+}
+
+type InvalidCredentialsError struct{}
+
+func (e *InvalidCredentialsError) Error() string {
+	return "invalid credentials"
 }

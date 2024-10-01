@@ -3,6 +3,8 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
+
 	"github.com/devbenho/bazar-user-service/internal/dtos"
 	"github.com/devbenho/bazar-user-service/internal/repositories"
 	"github.com/devbenho/bazar-user-service/pkg/errors"
@@ -10,7 +12,6 @@ import (
 	"github.com/devbenho/bazar-user-service/pkg/tokens"
 	"github.com/devbenho/bazar-user-service/pkg/validation"
 	"github.com/go-playground/validator/v10"
-	"log"
 )
 
 type IUserService interface {
@@ -35,20 +36,25 @@ func (s *UserService) Login(ctx context.Context, dto *dtos.AuthDTO) (*dtos.AuthR
 		return nil, err
 	}
 	if !isExist {
-		return nil, err
+		return nil, &errors.NotFoundError{
+			Entity: "user",
+		}
 	}
 
 	user, err := s.repo.GetUserByUsername(dto.Login)
 	if err != nil {
 		user, err = s.repo.GetUserByEmail(dto.Login)
 		if err != nil {
-			return nil, err
+			return nil, &errors.NotFoundError{
+				Entity: "user",
+				Field:  "login key",
+				Value:  dto.Login,
+			}
 		}
 	}
 
-	log.Print("res is ", err)
 	if s.hasher.Compare(user.Password, dto.Password); err != nil {
-		return nil, errors.NewValidationError("password", "invalid", "password is invalid")
+		return nil, &errors.InvalidCredentialsError{}
 	}
 
 	payload := tokens.JWTPayload{
@@ -109,9 +115,7 @@ func NewUserService(
 }
 func (s *UserService) Register(ctx context.Context, dto *dtos.CreateUserRequest) (*dtos.CreateUserResponse, error) {
 	if err := s.validator.ValidateStruct(dto); err != nil {
-		log.Print("err is ", err)
 		if validationErrors, ok := err.(validator.ValidationErrors); ok {
-			log.Println("lll")
 			validationErrorsResult := convertValidationErrors(validationErrors)
 
 			return nil, validationErrorsResult
