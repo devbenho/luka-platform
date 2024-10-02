@@ -60,24 +60,26 @@ func (h *UserHandler) Register(w http.ResponseWriter, r *http.Request) error {
 // @Success 200 {object} dtos.AuthResponseDTO
 // @Failure 400 {object} utils.ErrorResponse
 // @Failure 401 {object} utils.ErrorResponse
-// @Router /user/login [post]
-func (h *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
+// @Router /auth/login [post]
+func (h *UserHandler) Login(w http.ResponseWriter, r *http.Request) error {
 	var authDTO dtos.AuthDTO
 
 	if err := json.NewDecoder(r.Body).Decode(&authDTO); err != nil {
 		http.Error(w, "Invalid input", http.StatusBadRequest)
-		return
+		return err
 	}
 
 	response, err := h.service.Login(r.Context(), &authDTO)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return
+		return err
 	}
+
+	result := utils.NewSuccessResponse(http.StatusOK, "User logged in successfully", response)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(result)
+	return nil
 }
 
 // GetUserByID handles requests to fetch user details by ID
@@ -89,18 +91,18 @@ func (h *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} dtos.UserResponseDTO
 // @Failure 404 {object} utils.ErrorResponse
 // @Router /user/{id} [get]
-func (h *UserHandler) GetUserByID(w http.ResponseWriter, r *http.Request) {
-	id := mux.Vars(r)["id"]
+func (h *UserHandler) GetUserByID(w http.ResponseWriter, r *http.Request) error {
+	id := mux.Vars(r)["id"] // Get the user ID from the request path
 
 	user, err := h.service.GetUserByID(id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
+		return err
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(user)
+	return nil
 }
 
 // UpdateUser handles user update requests
@@ -115,24 +117,25 @@ func (h *UserHandler) GetUserByID(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} utils.ErrorResponse
 // @Failure 500 {object} utils.ErrorResponse
 // @Router /user/{id} [put]
-func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
+func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) error {
 	id := mux.Vars(r)["id"]
 
 	var updateUserRequest dtos.UpdateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&updateUserRequest); err != nil {
 		http.Error(w, "Invalid input", http.StatusBadRequest)
-		return
+		return err
 	}
 
 	updatedUser, err := h.service.UpdateUser(id, &updateUserRequest)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return err
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(updatedUser)
+	return nil
 }
 
 // DeleteUser handles user deletion requests

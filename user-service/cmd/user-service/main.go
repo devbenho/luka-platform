@@ -7,6 +7,7 @@ import (
 	"github.com/devbenho/bazar-user-service/ports/api/errors"
 	"github.com/devbenho/bazar-user-service/ports/api/handlers"
 	"github.com/devbenho/bazar-user-service/ports/api/middlewares"
+	"github.com/gorilla/mux"
 
 	configs "github.com/devbenho/bazar-user-service/configs"
 	"github.com/devbenho/bazar-user-service/internal/database"
@@ -37,13 +38,15 @@ func main() {
 	userHandler := handlers.NewUserHandler(userService)
 
 	// Setup routes
-	mux := http.NewServeMux()
-	mux.HandleFunc("/user", errors.ErrorHandler(userHandler.Register))
+	mux := mux.NewRouter()
+	// add prefix to the routes /api/v1
+	mux = mux.PathPrefix("/api/v1").Subrouter()
+	mux.HandleFunc("/auth/register", errors.ErrorHandler(userHandler.Register)).Methods("POST")
 
-	mux.HandleFunc("/user/login", userHandler.Login)
-	mux.HandleFunc("/user/get", userHandler.GetUserByID)
-	mux.HandleFunc("/user/update", userHandler.UpdateUser)
-	mux.HandleFunc("/user/delete", userHandler.DeleteUser)
+	mux.HandleFunc("/auth/login", errors.ErrorHandler(userHandler.Login)).Methods("POST")
+	mux.HandleFunc("/user/:id", errors.ErrorHandler(userHandler.GetUserByID)).Methods("GET")
+	mux.HandleFunc("/user/:id", errors.ErrorHandler(userHandler.UpdateUser)).Methods("PUT")
+	mux.HandleFunc("/user/:id", userHandler.DeleteUser).Methods("DELETE")
 
 	// Swagger route
 	mux.HandleFunc("/swagger/", httpSwagger.WrapHandler)

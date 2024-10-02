@@ -8,6 +8,7 @@ import (
 )
 
 type APIError struct {
+	Success bool   `json:"success"`
 	Status  int    `json:"status"`
 	Message string `json:"message"`
 }
@@ -17,7 +18,7 @@ func (e *APIError) Error() string {
 }
 
 func NewAPIError(status int, message string) *APIError {
-	return &APIError{Status: status, Message: message}
+	return &APIError{Success: false, Status: status, Message: message}
 }
 
 func MapErrorToHTTP(err error) *APIError {

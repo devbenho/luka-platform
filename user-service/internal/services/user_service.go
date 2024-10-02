@@ -6,7 +6,9 @@ import (
 	"log"
 
 	"github.com/devbenho/bazar-user-service/internal/dtos"
+	"github.com/devbenho/bazar-user-service/internal/models"
 	"github.com/devbenho/bazar-user-service/internal/repositories"
+	"github.com/devbenho/bazar-user-service/internal/utils"
 	"github.com/devbenho/bazar-user-service/pkg/errors"
 	"github.com/devbenho/bazar-user-service/pkg/hasher"
 	"github.com/devbenho/bazar-user-service/pkg/tokens"
@@ -18,9 +20,9 @@ type IUserService interface {
 	Register(ctx context.Context, dto *dtos.CreateUserRequest) (*dtos.CreateUserResponse, error)
 	Login(ctx context.Context, dto *dtos.AuthDTO) (*dtos.AuthResponseDTO, error)
 	GetUserByID(id string) (*dtos.UserResponseDTO, error)
-	IsUserExists(login string) (bool, error)
 	UpdateUser(id string, user *dtos.UpdateUserRequest) (*dtos.UserResponseDTO, error)
 	DeleteUser(id string) error
+	FindUser(login string) (*models.User, error)
 }
 
 type UserService struct {
@@ -31,35 +33,25 @@ type UserService struct {
 }
 
 func (s *UserService) Login(ctx context.Context, dto *dtos.AuthDTO) (*dtos.AuthResponseDTO, error) {
-	isExist, err := s.IsUserExists(dto.Login)
+	existUser, err := s.FindUser(dto.Login)
 	if err != nil {
 		return nil, err
 	}
-	if !isExist {
+	if existUser == nil {
 		return nil, &errors.NotFoundError{
 			Entity: "user",
+			Field:  "login key",
+			Value:  dto.Login,
 		}
 	}
 
-	user, err := s.repo.GetUserByUsername(dto.Login)
-	if err != nil {
-		user, err = s.repo.GetUserByEmail(dto.Login)
-		if err != nil {
-			return nil, &errors.NotFoundError{
-				Entity: "user",
-				Field:  "login key",
-				Value:  dto.Login,
-			}
-		}
-	}
-
-	if s.hasher.Compare(user.Password, dto.Password); err != nil {
+	if s.hasher.Compare(existUser.Password, dto.Password); err != nil {
 		return nil, &errors.InvalidCredentialsError{}
 	}
 
 	payload := tokens.JWTPayload{
-		Username: user.Username,
-		Role:     user.Role,
+		Username: existUser.Username,
+		Role:     existUser.Role,
 	}
 
 	token, err := s.token.GenerateToken(payload)
@@ -68,36 +60,76 @@ func (s *UserService) Login(ctx context.Context, dto *dtos.AuthDTO) (*dtos.AuthR
 	}
 
 	return &dtos.AuthResponseDTO{
-		Email: user.Email,
+		Email: existUser.Email,
 		Token: token.Token,
 	}, nil
-
 }
 
 func (s *UserService) GetUserByID(id string) (*dtos.UserResponseDTO, error) {
-	//TODO implement me
-	panic("implement me")
+	user, err := s.repo.GetUserByID(id)
+	if err != nil {
+		return nil, err
+	}
+	return &dtos.UserResponseDTO{
+		ID:       user.ID.Hex(),
+		Username: user.Username,
+		Email:    user.Email,
+		Role:     user.Role,
+	}, nil
 }
 
-func (s *UserService) IsUserExists(login string) (bool, error) {
-	_, err := s.repo.GetUserByUsername(login)
-	if err != nil {
-		_, err = s.repo.GetUserByEmail(login)
-		if err != nil {
-			return false, nil
+func (s *UserService) FindUser(login string) (*models.User, error) {
+	isEmail := utils.IsEmailValid(login)
+	var user *models.User
+	var err error
+	if isEmail {
+		user, err = s.repo.GetUserByEmail(login)
+		if err == nil {
+			return user, nil
 		}
 	}
-	return true, nil
+	user, err = s.repo.GetUserByUsername(login)
+
+	if err != nil {
+		return nil, &errors.NotFoundError{
+			Entity: "user",
+			Field:  "login key",
+			Value:  login,
+		}
+	}
+
+	return user, nil
 }
 
 func (s *UserService) UpdateUser(id string, user *dtos.UpdateUserRequest) (*dtos.UserResponseDTO, error) {
-	//TODO implement me
-	panic("implement me")
+	existingUser, err := s.repo.GetUserByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	if user.Username != "" {
+		existingUser.Username = user.Username
+	}
+	if user.Email != "" {
+		existingUser.Email = user.Email
+	}
+
+	existingUser = user.ToUser()
+
+	if err := s.repo.UpdateUser(id, existingUser); err != nil {
+		return nil, err
+	}
+
+	return &dtos.UserResponseDTO{
+		ID:       existingUser.ID.Hex(),
+		Username: existingUser.Username,
+		Email:    existingUser.Email,
+		Role:     existingUser.Role,
+	}, nil
 }
 
 func (s *UserService) DeleteUser(id string) error {
-	//TODO implement me
-	panic("implement me")
+	return s.repo.DeleteUser(id)
 }
 
 func NewUserService(
@@ -113,11 +145,11 @@ func NewUserService(
 		hasher:    hasher,
 	}
 }
+
 func (s *UserService) Register(ctx context.Context, dto *dtos.CreateUserRequest) (*dtos.CreateUserResponse, error) {
 	if err := s.validator.ValidateStruct(dto); err != nil {
 		if validationErrors, ok := err.(validator.ValidationErrors); ok {
 			validationErrorsResult := convertValidationErrors(validationErrors)
-
 			return nil, validationErrorsResult
 		}
 		return nil, err
