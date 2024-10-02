@@ -45,7 +45,7 @@ func (s *UserService) Login(ctx context.Context, dto *dtos.AuthDTO) (*dtos.AuthR
 		}
 	}
 
-	if s.hasher.Compare(existUser.Password, dto.Password); err != nil {
+	if err := s.hasher.Compare(existUser.Password, dto.Password); err != nil {
 		return nil, &errors.InvalidCredentialsError{}
 	}
 

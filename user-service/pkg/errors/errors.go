@@ -80,5 +80,5 @@ func (e *BadRequestError) Error() string {
 type InvalidCredentialsError struct{}
 
 func (e *InvalidCredentialsError) Error() string {
-	return "invalid credentials"
+	return "invalid credentials provided for authentication, please try again"
 }

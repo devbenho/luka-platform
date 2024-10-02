@@ -35,6 +35,8 @@ func MapErrorToHTTP(err error) *APIError {
 		return NewAPIError(http.StatusConflict, e.Error())
 	case *errors.BadRequestError:
 		return NewAPIError(http.StatusBadRequest, e.Error())
+	case *errors.InvalidCredentialsError:
+		return NewAPIError(http.StatusUnauthorized, e.Error())
 	default:
 		return NewAPIError(http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 	}
