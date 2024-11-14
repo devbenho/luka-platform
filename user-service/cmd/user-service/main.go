@@ -4,18 +4,18 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/devbenho/bazar-user-service/ports/api/errors"
-	"github.com/devbenho/bazar-user-service/ports/api/handlers"
-	"github.com/devbenho/bazar-user-service/ports/api/middlewares"
+	"github.com/devbenho/luka-platform/ports/http/errors"
+	"github.com/devbenho/luka-platform/ports/http/handlers"
+	"github.com/devbenho/luka-platform/ports/http/middlewares"
 	"github.com/gorilla/mux"
 
-	configs "github.com/devbenho/bazar-user-service/configs"
-	"github.com/devbenho/bazar-user-service/internal/database"
-	"github.com/devbenho/bazar-user-service/internal/repositories"
-	"github.com/devbenho/bazar-user-service/internal/services"
-	"github.com/devbenho/bazar-user-service/pkg/hasher"
-	"github.com/devbenho/bazar-user-service/pkg/tokens"
-	"github.com/devbenho/bazar-user-service/pkg/validation"
+	configs "github.com/devbenho/luka-platform/configs"
+	"github.com/devbenho/luka-platform/internal/database"
+	"github.com/devbenho/luka-platform/internal/repositories"
+	"github.com/devbenho/luka-platform/internal/services"
+	"github.com/devbenho/luka-platform/pkg/hasher"
+	"github.com/devbenho/luka-platform/pkg/tokens"
+	"github.com/devbenho/luka-platform/pkg/validation"
 
 	httpSwagger "github.com/swaggo/http-swagger"
 )
@@ -52,7 +52,8 @@ func main() {
 	mux.HandleFunc("/swagger/", httpSwagger.WrapHandler)
 
 	// Wrap the mux with the error middleware
-	log.Printf("Starting server on port %s...", cfg.App.Port)
+	log.Printf("🚀 Starting server on port %s...", cfg.App.Port)
+	log.Printf("🥝 ENV %s...", cfg.App.Environment)
 	if err := http.ListenAndServe(":"+cfg.App.Port, middlewares.ErrorMiddleware(mux)); err != nil {
 		log.Fatal(err)
 	}
