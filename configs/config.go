@@ -1,12 +1,11 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
 
-	// spell-checker: disable
 	"github.com/joho/godotenv"
-	// spell-checker: enable
 )
 
 type Config struct {
@@ -22,14 +21,16 @@ type Config struct {
 
 	JWT struct {
 		Secret string
-		Expire int
 	}
 }
 
-func LoadConfig() (Config, error) {
+var (
+	config Config
+)
+
+func LoadConfig() (*Config, error) {
 	var config Config
-	// spell-checker: disable-next-line
-	err := godotenv.Load()
+	err := godotenv.Load(".env")
 	if err != nil {
 		log.Printf("Error loading .env file, relying on system environment variables: %s", err)
 	}
@@ -39,14 +40,15 @@ func LoadConfig() (Config, error) {
 	config.Database.URI = os.Getenv("MONGO_URI")
 	config.Database.Name = os.Getenv("DB_NAME")
 	config.JWT.Secret = os.Getenv("JWT_SECRET")
-	config.App.Port = os.Getenv("PORT")
-	config.App.Environment = os.Getenv("ENVIRONMENT")
 
-	// Validate if the required variables are set
 	if config.App.Port == "" || config.Database.URI == "" || config.Database.Name == "" || config.JWT.Secret == "" {
-		return config, err
+		return &config, fmt.Errorf("missing required environment variables")
 	}
 
 	log.Printf("Config loaded: %+v", config)
-	return config, nil
+	return &config, nil
+}
+
+func GetConfig() *Config {
+	return &config
 }

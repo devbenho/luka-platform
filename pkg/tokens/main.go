@@ -3,7 +3,7 @@ package tokens
 import (
 	"time"
 
-	"github.com/devbenho/luka-platform/internal/models"
+	"github.com/devbenho/luka-platform/internal/user/models"
 	"github.com/golang-jwt/jwt/v5"
 )
 

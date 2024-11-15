@@ -4,6 +4,7 @@ services:
     working_dir: /app
     volumes:
       - .:/app
-    command: go run ./cmd/web/main.go
-    env_file:
-      - .env
+    command: go run ./cmd/api/main.go
+    ports:
+      - "2707:2707"
+    

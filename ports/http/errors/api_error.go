@@ -3,7 +3,7 @@ package errors
 import (
 	"net/http"
 
-	"github.com/devbenho/luka-platform/internal/database"
+	"github.com/devbenho/luka-platform/pkg/database"
 	"github.com/devbenho/luka-platform/pkg/errors"
 )
 
