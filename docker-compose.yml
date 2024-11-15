@@ -1,0 +1,9 @@
+services:
+  app:
+    image: golang:1.23
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: go run ./cmd/web/main.go
+    env_file:
+      - .env
