@@ -1,16 +1,20 @@
 package tokens
 
 import (
+	"log"
+	"strings"
 	"time"
 
-	"github.com/devbenho/luka-platform/internal/user/models"
+	config "github.com/devbenho/luka-platform/configs"
+	"github.com/devbenho/luka-platform/internal/utils"
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// JWTPayload represents the payload stored in JWT token
+// JWTPayload represents the payload stored in a JWT token
 type JWTPayload struct {
-	Username string `json:"username"`
-	Role     string `json:"role"`
+	userId string
+	role   string
+	email  string
 }
 
 // TokenService provides methods for generating and parsing JWT tokens
@@ -24,44 +28,41 @@ func NewTokenService(secret string) *TokenService {
 		secret: secret,
 	}
 }
-
-// GenerateToken generates a JWT token for the provided payload
-func (s *TokenService) GenerateToken(payload JWTPayload) (models.Token, error) {
-	claims := jwt.MapClaims{
-		"username": payload.Username,
-		"role":     payload.Role,
-		"exp":      time.Now().Add(time.Hour * 24).Unix(), // Set token expiration
+func GenerateAccessToken(payload map[string]interface{}) string {
+	cfg := config.GetConfig()
+	payload["type"] = "access"
+	tokenContent := jwt.MapClaims{
+		"payload": payload,
+		"exp":     time.Now().Add(24 * time.Hour).Unix(),
 	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signedToken, err := token.SignedString([]byte(s.secret))
+	jwtToken := jwt.NewWithClaims(jwt.GetSigningMethod("HS256"), tokenContent)
+	token, err := jwtToken.SignedString([]byte(cfg.JWT.Secret))
 	if err != nil {
-		return models.Token{}, err
+		log.Fatal("Failed to generate access token: ", err)
+		return ""
 	}
 
-	return models.Token{Token: signedToken}, nil
+	return token
 }
 
-// ParseToken parses a JWT token and returns the payload
-func (s *TokenService) ParseToken(tokenString string) (*JWTPayload, error) {
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		// Ensure the signing method is correct
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, jwt.ErrSignatureInvalid
-		}
-		return []byte(s.secret), nil
+func ValidateToken(jwtToken string) (map[string]interface{}, error) {
+	cfg := config.GetConfig()
+	cleanJWT := strings.Replace(jwtToken, "Bearer ", "", -1)
+	tokenData := jwt.MapClaims{}
+	token, err := jwt.ParseWithClaims(cleanJWT, tokenData, func(token *jwt.Token) (interface{}, error) {
+		return []byte(cfg.JWT.Secret), nil
 	})
+
 	if err != nil {
 		return nil, err
 	}
 
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok || !token.Valid {
+	if !token.Valid {
 		return nil, jwt.ErrInvalidKey
 	}
 
-	return &JWTPayload{
-		Username: claims["username"].(string),
-		Role:     claims["role"].(string),
-	}, nil
+	var data map[string]interface{}
+	utils.Copy(&data, tokenData["payload"])
+
+	return data, nil
 }

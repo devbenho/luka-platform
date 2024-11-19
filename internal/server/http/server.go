@@ -9,6 +9,7 @@ import (
 	"github.com/devbenho/luka-platform/internal/utils"
 	"github.com/devbenho/luka-platform/pkg/database"
 	"github.com/devbenho/luka-platform/pkg/validation"
+	"github.com/devbenho/luka-platform/ports/http/stores"
 	"github.com/devbenho/luka-platform/ports/http/users"
 	"github.com/gin-gonic/gin"
 )
@@ -58,5 +59,6 @@ func (s Server) GetEngine() *gin.Engine {
 func (s Server) MapRoutes() error {
 	v1 := s.engine.Group("/api/v1")
 	users.Routes(v1, s.db, s.validator, *s.cfg)
+	stores.Routes(v1, s.db, s.validator, *s.cfg)
 	return nil
 }

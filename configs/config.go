@@ -21,6 +21,7 @@ type Config struct {
 
 	JWT struct {
 		Secret string
+		Type   string
 	}
 }
 
@@ -40,6 +41,7 @@ func LoadConfig() (*Config, error) {
 	config.Database.URI = os.Getenv("MONGO_URI")
 	config.Database.Name = os.Getenv("DB_NAME")
 	config.JWT.Secret = os.Getenv("JWT_SECRET")
+	config.JWT.Type = os.Getenv("JWT_TYPE")
 
 	if config.App.Port == "" || config.Database.URI == "" || config.Database.Name == "" || config.JWT.Secret == "" {
 		return &config, fmt.Errorf("missing required environment variables")
@@ -50,5 +52,7 @@ func LoadConfig() (*Config, error) {
 }
 
 func GetConfig() *Config {
-	return &config
+	// Load the configuration from environment variables
+	config, _ := LoadConfig()
+	return config
 }
