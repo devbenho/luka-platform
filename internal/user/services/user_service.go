@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
 
 	dtos "github.com/devbenho/luka-platform/internal/user/dtos/users"
 	"github.com/devbenho/luka-platform/internal/user/models"
@@ -62,15 +61,14 @@ func (s *UserService) Register(ctx context.Context, dto *dtos.CreateUserRequest)
 		return nil, err
 	}
 
-	log.Println(`User created successfully`)
-	payload := tokens.JWTPayload{
-		Username: user.Username,
-		Role:     user.Role,
+	payload := map[string]interface{}{
+		"Id":       user.ID.Hex(),
+		"Email":    user.Email,
+		"Role":     user.Role,
+		"Username": user.Username,
 	}
-	token, err := s.token.GenerateToken(payload)
-	if err != nil {
-		return nil, err
-	}
+
+	token := tokens.GenerateAccessToken(payload)
 
 	return &dtos.CreateUserResponse{
 		ID:    user.ID.Hex(),
@@ -95,19 +93,17 @@ func (s *UserService) Login(ctx context.Context, dto *dtos.AuthDTO) (*dtos.AuthR
 		return nil, &errors.InvalidCredentialsError{}
 	}
 
-	payload := tokens.JWTPayload{
-		Username: existUser.Username,
-		Role:     existUser.Role,
+	payload := map[string]interface{}{
+		"Id":    existUser.ID.Hex(),
+		"Email": existUser.Email,
+		"Role":  existUser.Role,
 	}
 
-	token, err := s.token.GenerateToken(payload)
-	if err != nil {
-		return nil, err
-	}
+	token := tokens.GenerateAccessToken(payload)
 
 	return &dtos.AuthResponseDTO{
 		Email: existUser.Email,
-		Token: token.Token,
+		Token: token,
 	}, nil
 }
 

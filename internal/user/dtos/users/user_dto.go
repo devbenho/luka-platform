@@ -3,17 +3,14 @@ package dtos
 import "github.com/devbenho/luka-platform/internal/user/models"
 
 type UserDTO struct {
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
-	Username  string `json:"username"`
-	Email     string `json:"email"`
-	Role      string `json:"role"`
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	Role     string `json:"role"`
 }
 
 type UserResponseDTO struct {
 	ID        string `json:"id"`
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
 	Username  string `json:"username"`
 	Email     string `json:"email"`
 	Role      string `json:"role"`
@@ -26,8 +23,6 @@ type CreateUserRequest struct {
 	Email    string `json:"email" validate:"required,email"`
 	Password string `json:"password" validate:"required,min=6"`
 	Role     string `json:"role" validate:"required,oneof=buyer seller supplier"`
-
-	// generate function to convert CreateUserRequest to User
 }
 
 func (c *CreateUserRequest) ToUser() *models.User {
@@ -40,8 +35,8 @@ func (c *CreateUserRequest) ToUser() *models.User {
 }
 
 type CreateUserResponse struct {
-	ID    string       `json:"id"`
-	Token models.Token `json:"token"`
+	ID    string `json:"id"`
+	Token string `json:"token"`
 }
 
 type GetUserResponse struct {
