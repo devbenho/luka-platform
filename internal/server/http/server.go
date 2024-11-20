@@ -40,9 +40,9 @@ func (s Server) Run() error {
 	if err := s.MapRoutes(); err != nil {
 		log.Fatalf("MapRoutes Error: %v", err)
 	}
-	s.engine.GET("/health", func(c *gin.Context) {
+	s.engine.GET("/ping", func(c *gin.Context) {
 		utils.NewSuccessResponse(http.StatusOK, "OK", nil)
-		c.JSON(http.StatusOK, utils.NewSuccessResponse(http.StatusOK, "OK", nil))
+		c.JSON(http.StatusOK, utils.NewSuccessResponse(http.StatusOK, "pong", nil))
 	})
 
 	if err := s.engine.Run(fmt.Sprintf(":%s", s.cfg.App.Port)); err != nil {
