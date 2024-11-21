@@ -19,6 +19,8 @@ type IDatabase interface {
 	CreateInBatches(ctx context.Context, collection string, docs []interface{}) error
 	Update(ctx context.Context, collection string, filter, update interface{}) error
 	Delete(ctx context.Context, collection string, filter interface{}) error
+	DeleteAll(ctx context.Context, collection string, filter interface{}) error
+	SoftDelete(ctx context.Context, collection string, filter interface{}) error
 	FindById(ctx context.Context, collection, id string, result interface{}) error
 	FindOne(ctx context.Context, collection string, filter, result interface{}) error
 	Find(ctx context.Context, collection string, filter, result interface{}) error
@@ -102,6 +104,28 @@ func (d *Database) Delete(ctx context.Context, collection string, filter interfa
 
 	_, err := d.database.Collection(collection).DeleteOne(ctx, filter)
 	return err
+}
+
+func (d *Database) DeleteAll(ctx context.Context, collection string, filter interface{}) error {
+	ctx, cancel := context.WithTimeout(ctx, DatabaseTimeout)
+	defer cancel()
+
+	_, err := d.database.Collection(collection).DeleteMany(ctx, filter)
+	return err
+}
+
+func (d *Database) SoftDelete(ctx context.Context, collection string, filter interface{}) error {
+	ctx, cancel := context.WithTimeout(ctx, DatabaseTimeout)
+	defer cancel()
+	update := bson.M{"$set": bson.M{"DeletedAt": time.Now()}}
+	updateResult, err := d.database.Collection(collection).UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+	if updateResult.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }
 
 func (d *Database) FindById(ctx context.Context, collection, id string, result interface{}) error {
