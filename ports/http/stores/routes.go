@@ -15,8 +15,11 @@ func Routes(r *gin.RouterGroup, mongoDb database.IDatabase, validator *validatio
 	storeSvc := services.NewStoreService(storeRepo, validator)
 	storeHandler := NewStoreHandler(storeSvc)
 
-	authRoute := r.Group("/stores")
+	storesRoute := r.Group("/stores")
 	{
-		authRoute.POST("/", middleware.JWTAuth(), storeHandler.Create)
+		storesRoute.POST("/", middleware.JWTAuth(), storeHandler.Create)
+		storesRoute.PATCH("/:id", middleware.JWTAuth(), storeHandler.Update)
+		storesRoute.GET("/:id", middleware.JWTAuth(), storeHandler.GetById)
+		storesRoute.DELETE("/:id", middleware.JWTAuth(), storeHandler.Delete)
 	}
 }

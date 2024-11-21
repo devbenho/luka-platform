@@ -69,3 +69,75 @@ func (h *StoreHandler) Create(c *gin.Context) {
 	response := utils.NewSuccessResponse(http.StatusCreated, "Store registered successfully", result)
 	c.JSON(http.StatusCreated, response)
 }
+
+// GetStores handles fetching all stores
+// @Summary Get all stores
+// @Description Fetch all stores
+// @Tags stores
+// @Accept json
+// @Produce json
+// @Success 200 {object} utils.SuccessResponse
+// @Failure 500 {object} utils.ErrorResponse
+// @Router /stores [get]
+func (h *StoreHandler) GetById(c *gin.Context) {
+	id := c.Param("id")
+	store, err := h.service.GetStoreByID(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, utils.NewErrorResponse(http.StatusInternalServerError, "Failed to fetch store", err.Error()))
+		return
+	}
+
+	response := utils.NewSuccessResponse(http.StatusOK, "Store fetched successfully", store)
+	c.JSON(http.StatusOK, response)
+}
+
+// Update handles updating a store
+// @Summary Update a store
+// @Description Update a store with the provided details
+// @Tags stores
+// @Accept json
+// @Produce json
+// @Param id path string true "Store ID"
+// @Param store body dtos.UpdateStoreRequest true "Store details"
+// @Success 200 {object} utils.SuccessResponse
+// @Failure 400 {object} utils.ErrorResponse
+// @Router /store/{id} [put]
+func (h *StoreHandler) Update(c *gin.Context) {
+	id := c.Param("id")
+	var updateStoreRequest dtos.UpdateStoreRequest
+	if err := c.ShouldBindJSON(&updateStoreRequest); err != nil {
+		c.JSON(http.StatusBadRequest, utils.NewErrorResponse(http.StatusBadRequest, "Invalid input", err.Error()))
+		return
+	}
+
+	store, err := h.service.UpdateStore(c.Request.Context(), id, &updateStoreRequest)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, utils.NewErrorResponse(http.StatusInternalServerError, "Failed to update store", err.Error()))
+		return
+	}
+
+	response := utils.NewSuccessResponse(http.StatusOK, "Store updated successfully", store)
+	c.JSON(http.StatusOK, response)
+}
+
+// Delete handles deleting a store
+// @Summary Delete a store
+// @Description Delete a store with the provided ID
+// @Tags stores
+// @Accept json
+// @Produce json
+// @Param id path string true "Store ID"
+// @Success 200 {object} utils.SuccessResponse
+// @Failure 400 {object} utils.ErrorResponse
+// @Router /store/{id} [delete]
+func (h *StoreHandler) Delete(c *gin.Context) {
+	id := c.Param("id")
+	err := h.service.DeleteStore(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, utils.NewErrorResponse(http.StatusInternalServerError, "Failed to delete store", err.Error()))
+		return
+	}
+
+	response := utils.NewSuccessResponse(http.StatusOK, "Store deleted successfully", nil)
+	c.JSON(http.StatusOK, response)
+}
