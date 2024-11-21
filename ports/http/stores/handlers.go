@@ -7,6 +7,7 @@ import (
 	"github.com/devbenho/luka-platform/internal/store/services"
 	"github.com/devbenho/luka-platform/internal/utils"
 	"github.com/devbenho/luka-platform/pkg/slug"
+	errors "github.com/devbenho/luka-platform/ports/http/errors"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -83,7 +84,8 @@ func (h *StoreHandler) GetById(c *gin.Context) {
 	id := c.Param("id")
 	store, err := h.service.GetStoreByID(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, utils.NewErrorResponse(http.StatusInternalServerError, "Failed to fetch store", err.Error()))
+		apiError := errors.MapErrorToHTTP(err)
+		c.JSON(apiError.Status, apiError)
 		return
 	}
 
@@ -112,7 +114,8 @@ func (h *StoreHandler) Update(c *gin.Context) {
 
 	store, err := h.service.UpdateStore(c.Request.Context(), id, &updateStoreRequest)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, utils.NewErrorResponse(http.StatusInternalServerError, "Failed to update store", err.Error()))
+		apiError := errors.MapErrorToHTTP(err)
+		c.JSON(apiError.Status, apiError)
 		return
 	}
 
@@ -134,7 +137,8 @@ func (h *StoreHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	err := h.service.DeleteStore(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, utils.NewErrorResponse(http.StatusInternalServerError, "Failed to delete store", err.Error()))
+		apiError := errors.MapErrorToHTTP(err)
+		c.JSON(apiError.Status, apiError)
 		return
 	}
 

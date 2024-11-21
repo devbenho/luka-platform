@@ -83,10 +83,12 @@ func (s *StoreService) UpdateStore(ctx context.Context, id string, store *dtos.U
 	}
 
 	updatedStore := store.ToStore()
-	log.Println(`The updated store entity is `, updatedStore)
 	updatedStore.ID = existingStore.ID
 	updatedStore.OwnerId = existingStore.OwnerId
-
+	userID, ok := ctx.Value("user_id").(string)
+	if !ok || userID != updatedStore.OwnerId.String() {
+		return nil, &errors.UnauthorizedError{Action: "update"}
+	}
 	err = s.repo.UpdateStore(ctx, id, updatedStore)
 	if err != nil {
 		return nil, err

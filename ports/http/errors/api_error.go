@@ -28,7 +28,7 @@ func MapErrorToHTTP(err error) *APIError {
 	case *errors.NotFoundError:
 		return NewAPIError(http.StatusNotFound, e.Error())
 	case *errors.UnauthorizedError:
-		return NewAPIError(http.StatusUnauthorized, e.Error())
+		return NewAPIError(http.StatusForbidden, e.Error())
 	case *errors.InternalServerError:
 		return NewAPIError(http.StatusInternalServerError, e.Error())
 	case *errors.ConflictError, *database.DBDuplicateError:
