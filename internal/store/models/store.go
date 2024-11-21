@@ -18,6 +18,7 @@ type Store struct {
 	SocialMediaLinks map[string]string  `json:"social_media_links"`
 	CreatedAt        time.Time          `json:"created_at"`
 	UpdatedAt        time.Time          `json:"updated_at"`
+	DeletedAt        *time.Time         `json:"deleted_at" default:"null"`
 }
 
 func (s *Store) Validate() error {
@@ -31,6 +32,7 @@ func (s *Store) Validate() error {
 func (s *Store) SetDefaults() {
 	s.CreatedAt = time.Now()
 	s.UpdatedAt = time.Now()
+
 	if reflect.DeepEqual(s.Type, StoreType{}) {
 		s.Type = StoreType{
 			Online:  true,

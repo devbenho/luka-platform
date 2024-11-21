@@ -2,6 +2,7 @@ package dtos
 
 import (
 	"github.com/devbenho/luka-platform/internal/store/models"
+	"github.com/devbenho/luka-platform/pkg/slug"
 	"github.com/go-playground/validator/v10"
 )
 
@@ -12,6 +13,7 @@ type UpdateStoreRequest struct {
 func (u *UpdateStoreRequest) ToStore() *models.Store {
 	return &models.Store{
 		Name: u.Name,
+		Slug: slug.GenerateSlug(u.Name),
 	}
 }
 

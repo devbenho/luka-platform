@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"errors"
+	"log"
 	"time"
 
 	"github.com/devbenho/luka-platform/internal/store/models"
@@ -79,5 +80,15 @@ func (r *StoreRepository) UpdateStore(ctx context.Context, id string, store *mod
 }
 
 func (r *StoreRepository) DeleteStore(ctx context.Context, id string) error {
+	log.Println(`The store ID is `, id)
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return errors.New("invalid store ID")
+	}
+	filter := bson.M{"_id": objID}
+	// get the store
+	store, _ := r.GetStoreByID(ctx, id)
+	log.Println(`The store entity is this `, store)
+	r.db.SoftDelete(ctx, "stores", filter)
 	return nil
 }

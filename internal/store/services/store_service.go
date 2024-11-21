@@ -55,14 +55,68 @@ func (s *StoreService) CreateStore(ctx context.Context, store *dtos.CreateStoreR
 }
 
 func (s *StoreService) GetStoreByID(ctx context.Context, id string) (*models.Store, error) {
-	return nil, nil
+	store, err := s.repo.GetStoreByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if store.DeletedAt != nil {
+		return nil, &errors.NotFoundError{Entity: "store", Field: "id", Value: id}
+	}
+	return store, nil
 }
 
 func (s *StoreService) UpdateStore(ctx context.Context, id string, store *dtos.UpdateStoreRequest) (*models.Store, error) {
-	return nil, nil
+	if err := store.Validate(); err != nil {
+		if validationErrors, ok := err.(validator.ValidationErrors); ok {
+			validationErrorsResult := convertValidationErrors(validationErrors)
+			return nil, validationErrorsResult
+		}
+		return nil, err
+	}
+
+	existingStore, err := s.repo.GetStoreByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if existingStore.DeletedAt != nil {
+		return nil, &errors.NotFoundError{Entity: "store", Field: "id", Value: id}
+	}
+
+	updatedStore := store.ToStore()
+	log.Println(`The updated store entity is `, updatedStore)
+	updatedStore.ID = existingStore.ID
+	updatedStore.OwnerId = existingStore.OwnerId
+
+	err = s.repo.UpdateStore(ctx, id, updatedStore)
+	if err != nil {
+		return nil, err
+	}
+
+	err = s.repo.UpdateStore(ctx, id, updatedStore)
+	if err != nil {
+		return nil, err
+	}
+
+	return updatedStore, nil
 }
 
 func (s *StoreService) DeleteStore(ctx context.Context, id string) error {
+	store, err := s.repo.GetStoreByID(ctx, id)
+	log.Println(`The store entity is `, store)
+	if err != nil {
+		return err
+	}
+	if store.DeletedAt != nil {
+		return &errors.NotFoundError{
+			Entity: "store",
+			Field:  "id",
+			Value:  id,
+		}
+	}
+
+	if err := s.repo.DeleteStore(ctx, id); err != nil {
+		return err
+	}
 	return nil
 }
 
