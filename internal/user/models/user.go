@@ -16,6 +16,7 @@ type User struct {
 	Role      string             `bson:"role" validate:"required,oneof=buyer seller supplier user"`
 	CreatedAt time.Time          `bson:"created_at"`
 	UpdatedAt time.Time          `bson:"updated_at"`
+	DeletedAt *time.Time         `bson:"deleted_at"`
 }
 
 func ValidateUser(user User) error {

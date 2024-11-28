@@ -126,17 +126,10 @@ func (s *UserService) UpdateUser(ctx context.Context, id string, user *dtos.Upda
 		return nil, err
 	}
 
-	if user.Username != "" {
-		existingUser.Username = user.Username
-	}
-	if user.Email != "" {
-		existingUser.Email = user.Email
-	}
-
 	if err := s.repo.UpdateUser(ctx, id, existingUser); err != nil {
 		return nil, err
 	}
-
+	utils.Copy(existingUser, user)
 	return &dtos.UserResponseDTO{
 		ID:       existingUser.ID.Hex(),
 		Username: existingUser.Username,

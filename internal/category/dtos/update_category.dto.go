@@ -7,10 +7,10 @@ import (
 )
 
 type UpdateCategoryRequest struct {
-	Name        string `json:"name" validate:"omitempty,min=3,max=50"`
-	Slug        string `json:"slug" validate:"omitempty,slug"`
-	Description string `json:"description" validate:"omitempty,max=200"`
-	ParentID    string `json:"parent_id" validate:"omitempty"`
+	Name        *string `json:"name" validate:"omitempty,min=3,max=50"`
+	Slug        *string `json:"slug" validate:"omitempty,slug"`
+	Description *string `json:"description" validate:"omitempty,max=200"`
+	ParentID    *string `json:"parent_id" validate:"omitempty"`
 }
 
 type UpdateCategoryResponse struct {
@@ -18,15 +18,15 @@ type UpdateCategoryResponse struct {
 }
 
 func (r *UpdateCategoryRequest) ToCategory() (models.Category, error) {
-	parentID, err := primitive.ObjectIDFromHex(r.ParentID)
-	if err != nil && r.ParentID != "" {
+	parentID, err := primitive.ObjectIDFromHex(*r.ParentID)
+	if err != nil && r.ParentID != nil {
 		return models.Category{}, err
 	}
 
 	return models.Category{
-		Name:        r.Name,
-		Slug:        r.Slug,
-		Description: r.Description,
+		Name:        *r.Name,
+		Slug:        *r.Slug,
+		Description: *r.Description,
 		ParentID:    &parentID,
 	}, nil
 }

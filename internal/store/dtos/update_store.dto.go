@@ -7,13 +7,13 @@ import (
 )
 
 type UpdateStoreRequest struct {
-	Name string `json:"name" validate:"required"`
+	Name *string `json:"name" validate:"required"`
 }
 
 func (u *UpdateStoreRequest) ToStore() *models.Store {
 	return &models.Store{
-		Name: u.Name,
-		Slug: slug.GenerateSlug(u.Name),
+		Name: *u.Name,
+		Slug: slug.GenerateSlug(*u.Name),
 	}
 }
 

@@ -92,7 +92,8 @@ func (h *CategoryHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, utils.NewErrorResponse(http.StatusBadRequest, "Invalid input", err.Error()))
 		return
 	}
-	updateCategoryRequest.Slug = slug.GenerateSlug(updateCategoryRequest.Name)
+	slugValue := slug.GenerateSlug(*updateCategoryRequest.Name)
+	updateCategoryRequest.Slug = &slugValue
 	category, err := h.service.UpdateCategory(c.Request.Context(), id, &updateCategoryRequest)
 	if err != nil {
 		apiError := errors.MapErrorToHTTP(err)
