@@ -10,12 +10,11 @@ import (
 type Product struct {
 	ID          primitive.ObjectID    `json:"id" bson:"_id"`
 	Name        string                `json:"name" bson:"name"`
-	Description string                `json:"description" bson:"description"`
+	Description interface{}           `json:"description" bson:"description"`
 	Price       float64               `json:"price" bson:"price"`
 	StoreID     primitive.ObjectID    `json:"store_id" bson:"store_id"`
 	Categories  []*primitive.ObjectID `json:"categories" bson:"categories"`
 	Images      []string              `json:"images" bson:"images"`
-	Qty         int                   `json:"qty" bson:"qty"`
 	CreatedAt   time.Time             `json:"created_at" bson:"created_at"`
 	UpdatedAt   time.Time             `json:"updated_at" bson:"updated_at"`
 	DeletedAt   *time.Time            `json:"deleted_at" bson:"deleted_at"`

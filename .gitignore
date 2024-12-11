@@ -25,3 +25,9 @@ go.work.sum
 
 # ignore .DS_Store
 .DS_Store
+
+# ignore .idea
+.idea
+
+# ignore vendor directory
+vendor

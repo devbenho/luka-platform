@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/devbenho/luka-platform/internal/user/models"
@@ -24,7 +25,8 @@ type IUserRepository interface {
 }
 
 type userRepository struct {
-	db database.IDatabase
+	db     database.IDatabase
+	mu     sync.RWMutex
 }
 
 func NewUserRepository(db database.IDatabase) IUserRepository {
@@ -35,6 +37,9 @@ func NewUserRepository(db database.IDatabase) IUserRepository {
 
 // CreateUser inserts a new user into the database
 func (r *userRepository) CreateUser(ctx context.Context, user *models.User) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	user.ID = primitive.NewObjectID()
 	user.CreatedAt = time.Now()
 	user.UpdatedAt = time.Now()
@@ -44,6 +49,9 @@ func (r *userRepository) CreateUser(ctx context.Context, user *models.User) erro
 
 // GetUserByID fetches a user by their ID from the database
 func (r *userRepository) GetUserByID(ctx context.Context, id string) (*models.User, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		return nil, errors.New("invalid user ID")
@@ -62,6 +70,9 @@ func (r *userRepository) GetUserByID(ctx context.Context, id string) (*models.Us
 
 // UpdateUser updates an existing user in the database
 func (r *userRepository) UpdateUser(ctx context.Context, id string, user *models.User) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		return errors.New("invalid user ID")
@@ -82,6 +93,9 @@ func (r *userRepository) UpdateUser(ctx context.Context, id string, user *models
 
 // DeleteUser deletes a user by their ID from the database
 func (r *userRepository) DeleteUser(ctx context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		return errors.New("invalid user ID")
@@ -94,6 +108,9 @@ func (r *userRepository) DeleteUser(ctx context.Context, id string) error {
 
 // IsUserExists checks if a user with the given login already exists in the database
 func (r *userRepository) IsUserExists(ctx context.Context, login string) (bool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
 	filter := bson.M{"$or": []bson.M{
 		{"email": login},
 		{"username": login},
@@ -108,6 +125,9 @@ func (r *userRepository) IsUserExists(ctx context.Context, login string) (bool, 
 
 // GetUserByEmail fetches a user by their email from the database
 func (r *userRepository) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
 	user := &models.User{}
 
 	filter := bson.M{"email": email}
@@ -120,6 +140,9 @@ func (r *userRepository) GetUserByEmail(ctx context.Context, email string) (*mod
 
 // GetUserByUsername fetches a user by their username from the database
 func (r *userRepository) GetUserByUsername(ctx context.Context, username string) (*models.User, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
 	user := &models.User{}
 
 	filter := bson.M{"username": username}

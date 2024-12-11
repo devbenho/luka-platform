@@ -67,12 +67,14 @@ func (s *ProductService) GetProductByID(ctx context.Context, id string) (*models
 
 func (s *ProductService) UpdateProduct(ctx context.Context, id string, product *dtos.UpdateProductRequest) (*models.Product, error) {
 	if err := product.Validate(); err != nil {
+		log.Println(`yalahwy `, err)
 		if validationErrors, ok := err.(validator.ValidationErrors); ok {
 			validationErrorsResult := convertValidationErrors(validationErrors)
 			return nil, validationErrorsResult
 		}
 		return nil, err
 	}
+	log.Println(`Hey`)
 
 	existingProduct, err := s.repo.GetProductByID(ctx, id)
 	if err != nil {

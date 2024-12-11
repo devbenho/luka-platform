@@ -10,6 +10,7 @@ import (
 	"github.com/devbenho/luka-platform/pkg/database"
 	"github.com/devbenho/luka-platform/pkg/validation"
 	"github.com/devbenho/luka-platform/ports/http/categories"
+	"github.com/devbenho/luka-platform/ports/http/inventories"
 	"github.com/devbenho/luka-platform/ports/http/products"
 	"github.com/devbenho/luka-platform/ports/http/stores"
 	"github.com/devbenho/luka-platform/ports/http/users"
@@ -43,7 +44,6 @@ func (s Server) Run() error {
 		log.Fatalf("MapRoutes Error: %v", err)
 	}
 	s.engine.GET("/ping", func(c *gin.Context) {
-		utils.NewSuccessResponse(http.StatusOK, "OK", nil)
 		c.JSON(http.StatusOK, utils.NewSuccessResponse(http.StatusOK, "pong", nil))
 	})
 
@@ -64,5 +64,6 @@ func (s Server) MapRoutes() error {
 	stores.Routes(v1, s.db, s.validator, *s.cfg)
 	categories.Routes(v1, s.db, s.validator, *s.cfg)
 	products.Routes(v1, s.db, s.validator, *s.cfg)
+	inventories.Routes(v1, s.db, s.validator, *s.cfg)
 	return nil
 }

@@ -13,7 +13,6 @@ type UpdateProductRequest struct {
 	StoreID     *primitive.ObjectID   `json:"store_id"`
 	Categories  []*primitive.ObjectID `json:"categories"`
 	Images      *[]string             `json:"images"`
-	Qty         *int                  `json:"qty"`
 }
 
 type UpdateProductResponse struct {

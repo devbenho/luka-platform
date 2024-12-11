@@ -13,7 +13,6 @@ type CreateProductRequest struct {
 	StoreID     primitive.ObjectID    `json:"store_id" binding:"required"`
 	Categories  []*primitive.ObjectID `json:"categories" binding:"required"`
 	Images      []string              `json:"images" bson:"images" binding:"required"`
-	Qty         int                   `json:"qty" bson:"qty" binding:"required"`
 }
 
 type CreateProductResponse struct {
@@ -28,7 +27,6 @@ func (r *CreateProductRequest) ToProduct() *models.Product {
 		StoreID:     r.StoreID,
 		Categories:  r.Categories,
 		Images:      r.Images,
-		Qty:         r.Qty,
 	}
 }
 
