@@ -42,7 +42,7 @@ func (s *ProductService) CreateProduct(ctx context.Context, product *dtos.Create
 
 	_, err := s.storeRepo.GetStoreByID(ctx, product.StoreID.Hex())
 	if err != nil {
-		return nil, errors.Wrap(err, "verifying store existence")
+		return nil, errors.NewNotFoundError("store", product.StoreID.Hex())
 	}
 
 	productResult, err := s.repo.CreateProduct(ctx, product.ToProduct())

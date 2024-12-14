@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/devbenho/luka-platform/internal/inventory/dtos"
 	"github.com/devbenho/luka-platform/internal/inventory/models"
@@ -12,7 +11,6 @@ import (
 	"github.com/devbenho/luka-platform/internal/utils"
 	"github.com/devbenho/luka-platform/pkg/errors"
 	"github.com/devbenho/luka-platform/pkg/validation"
-	"github.com/go-playground/validator/v10"
 )
 
 type IInventoryService interface {
@@ -35,16 +33,10 @@ func NewInventoryService(repo repositories.IInventoryRepository, validator *vali
 }
 
 func (s *InventoryService) CreateInventory(ctx context.Context, dto dtos.CreateInventoryRequest) (*models.Inventory, error) {
-	if err := dto.Validate(); err != nil {
-		if validationErrors, ok := err.(validator.ValidationErrors); ok {
-			validationErrorsResult := convertValidationErrors(validationErrors)
-			return nil, validationErrorsResult
-		}
+	if err := s.validator.ValidateStruct(dto); err != nil {
+		return nil, fmt.Errorf("invalid create request: %w", err)
 	}
 	inventory := dto.ToInventory()
-	inventory.CreatedAt = time.Now()
-	inventory.UpdatedAt = time.Now()
-
 	return s.repo.CreateInventory(ctx, inventory)
 }
 
@@ -85,14 +77,4 @@ func (s *InventoryService) GetInventoryByID(ctx context.Context, id string) (*mo
 	}
 
 	return existInventory, nil
-}
-
-func convertValidationErrors(validationErrors validator.ValidationErrors) errors.ValidationErrors {
-	var customErrors errors.ValidationErrors
-	for _, e := range validationErrors {
-		newError := errors.NewValidationError(e.Field(), e.Tag())
-		customErrors = append(customErrors, newError)
-	}
-
-	return customErrors
 }

@@ -31,6 +31,7 @@ func (r *InventoryRepository) CreateInventory(ctx context.Context, inventory *mo
 	inventory.ID = primitive.NewObjectID()
 	inventory.CreatedAt = time.Now()
 	inventory.UpdatedAt = time.Now()
+	inventory.Status = "in_stock"
 	if err := r.db.Create(ctx, "inventories", inventory); err != nil {
 		return nil, err
 	}

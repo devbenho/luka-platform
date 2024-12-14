@@ -41,7 +41,8 @@ func (h *ProductHandler) Create(c *gin.Context) {
 
 	result, err := h.service.CreateProduct(c.Request.Context(), &createProductRequest)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, err.Error())
+		apiError := errors.MapErrorToHTTP(err)
+		c.JSON(apiError.Status, apiError)
 		return
 	}
 
