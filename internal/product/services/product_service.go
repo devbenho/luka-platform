@@ -2,13 +2,12 @@ package services
 
 import (
 	"context"
-	"fmt"
-	"log"
 	"time"
 
 	"github.com/devbenho/luka-platform/internal/product/dtos"
 	"github.com/devbenho/luka-platform/internal/product/models"
 	"github.com/devbenho/luka-platform/internal/product/repositories"
+	storeRepo "github.com/devbenho/luka-platform/internal/store/repositories"
 	"github.com/devbenho/luka-platform/internal/utils"
 	"github.com/devbenho/luka-platform/pkg/errors"
 	"github.com/devbenho/luka-platform/pkg/validation"
@@ -24,29 +23,31 @@ type IProductService interface {
 
 type ProductService struct {
 	repo      repositories.IProductRepository
+	storeRepo storeRepo.IStoreRepository
 	validator *validation.Validator
 }
 
-func NewProductService(repository repositories.IProductRepository, validator *validation.Validator) IProductService {
+func NewProductService(repository repositories.IProductRepository, storeRepo storeRepo.IStoreRepository, validator *validation.Validator) IProductService {
 	return &ProductService{
 		repo:      repository,
 		validator: validator,
+		storeRepo: storeRepo,
 	}
 }
 
 func (s *ProductService) CreateProduct(ctx context.Context, product *dtos.CreateProductRequest) (*dtos.CreateProductResponse, error) {
-	log.Println(`Context is `, ctx)
-	if err := product.Validate(); err != nil {
-		if validationErrors, ok := err.(validator.ValidationErrors); ok {
-			validationErrorsResult := convertValidationErrors(validationErrors)
-			return nil, validationErrorsResult
-		}
-		return nil, err
+	if err := s.validator.ValidateStruct(product); err != nil {
+		return nil, errors.Wrap(err, "validating product")
 	}
-	log.Println(`The product entity is `, product.ToProduct())
+
+	_, err := s.storeRepo.GetStoreByID(ctx, product.StoreID.Hex())
+	if err != nil {
+		return nil, errors.Wrap(err, "verifying store existence")
+	}
+
 	productResult, err := s.repo.CreateProduct(ctx, product.ToProduct())
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "creating product in database")
 	}
 
 	return &dtos.CreateProductResponse{
@@ -60,33 +61,30 @@ func (s *ProductService) GetProductByID(ctx context.Context, id string) (*models
 		return nil, err
 	}
 	if product.DeletedAt != nil {
-		return nil, &errors.NotFoundError{Entity: "product", Field: "id", Value: id}
+		return nil, errors.NewNotFoundError(
+			"product",
+			id,
+		)
 	}
 	return product, nil
 }
 
 func (s *ProductService) UpdateProduct(ctx context.Context, id string, product *dtos.UpdateProductRequest) (*models.Product, error) {
 	if err := product.Validate(); err != nil {
-		log.Println(`yalahwy `, err)
-		if validationErrors, ok := err.(validator.ValidationErrors); ok {
-			validationErrorsResult := convertValidationErrors(validationErrors)
-			return nil, validationErrorsResult
-		}
-		return nil, err
+		return nil, errors.Wrap(err, "validating product update")
 	}
-	log.Println(`Hey`)
 
 	existingProduct, err := s.repo.GetProductByID(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "finding product")
 	}
 	if existingProduct.DeletedAt != nil {
-		return nil, &errors.NotFoundError{Entity: "product", Field: "id", Value: id}
+		return nil, errors.NewNotFoundError("product", id)
 	}
+
 	utils.Copy(existingProduct, product)
-	err = s.repo.UpdateProduct(ctx, id, existingProduct)
-	if err != nil {
-		return nil, err
+	if err := s.repo.UpdateProduct(ctx, id, existingProduct); err != nil {
+		return nil, errors.Wrap(err, "updating product")
 	}
 
 	return existingProduct, nil
@@ -95,17 +93,16 @@ func (s *ProductService) UpdateProduct(ctx context.Context, id string, product *
 func (s *ProductService) DeleteProduct(ctx context.Context, id string) error {
 	product, err := s.repo.GetProductByID(ctx, id)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "finding product")
 	}
 	if product.DeletedAt != nil {
-		return &errors.NotFoundError{Entity: "product", Field: "id", Value: id}
+		return errors.NewNotFoundError("product", id)
 	}
 
 	now := time.Now()
 	product.DeletedAt = &now
-	err = s.repo.UpdateProduct(ctx, id, product)
-	if err != nil {
-		return err
+	if err := s.repo.UpdateProduct(ctx, id, product); err != nil {
+		return errors.Wrap(err, "soft deleting product")
 	}
 
 	return nil
@@ -114,7 +111,7 @@ func (s *ProductService) DeleteProduct(ctx context.Context, id string) error {
 func convertValidationErrors(validationErrors validator.ValidationErrors) errors.ValidationErrors {
 	var customErrors errors.ValidationErrors
 	for _, e := range validationErrors {
-		newError := errors.NewValidationError(e.Field(), e.Tag(), fmt.Sprintf("%v", e.Value()))
+		newError := errors.NewValidationError(e.Field(), e.Tag())
 		customErrors = append(customErrors, newError)
 	}
 

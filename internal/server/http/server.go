@@ -11,6 +11,7 @@ import (
 	"github.com/devbenho/luka-platform/pkg/validation"
 	"github.com/devbenho/luka-platform/ports/http/categories"
 	"github.com/devbenho/luka-platform/ports/http/inventories"
+	"github.com/devbenho/luka-platform/ports/http/orders"
 	"github.com/devbenho/luka-platform/ports/http/products"
 	"github.com/devbenho/luka-platform/ports/http/stores"
 	"github.com/devbenho/luka-platform/ports/http/users"
@@ -65,5 +66,6 @@ func (s Server) MapRoutes() error {
 	categories.Routes(v1, s.db, s.validator, *s.cfg)
 	products.Routes(v1, s.db, s.validator, *s.cfg)
 	inventories.Routes(v1, s.db, s.validator, *s.cfg)
+	orders.Routes(v1, s.db, s.validator, *s.cfg)
 	return nil
 }

@@ -5,80 +5,143 @@ import (
 	"strings"
 )
 
-// ValidationError represents a validation error
-type ValidationError struct {
-	Field string `json:"field"`
-	Tag   string `json:"tag"`
-	Value string `json:"value"`
+type ErrorType string
+
+const (
+	ValidationErrorType ErrorType = "VALIDATION_ERROR"
+	NotFoundErrorType   ErrorType = "NOT_FOUND"
+	UnauthorizedType    ErrorType = "UNAUTHORIZED"
+	InternalServerType  ErrorType = "INTERNAL_SERVER_ERROR"
+	ConflictType        ErrorType = "CONFLICT"
+	BadRequestType      ErrorType = "BAD_REQUEST"
+	InvalidCredentials  ErrorType = "INVALID_CREDENTIALS"
+)
+
+// AppError is the base error type for the application
+type AppError struct {
+	Type     ErrorType              `json:"type"`
+	Message  string                 `json:"message"`
+	Field    string                 `json:"field,omitempty"`
+	Code     int                    `json:"code"`
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	Cause    error                  `json:"-"`
 }
 
-func (e *ValidationError) Error() string {
-	return fmt.Sprintf("validation failed on field '%s' with tag '%s with value %s'", e.Field, e.Tag, e.Value)
+func (e *AppError) Error() string {
+	if e.Field != "" {
+		return fmt.Sprintf("%s: %s (field: %s)", e.Type, e.Message, e.Field)
+	}
+	return fmt.Sprintf("%s: %s", e.Type, e.Message)
 }
 
-func NewValidationError(field, tag, value string) *ValidationError {
-	return &ValidationError{Field: field, Tag: tag, Value: value}
+func (e *AppError) Unwrap() error {
+	return e.Cause
 }
 
-type ValidationErrors []*ValidationError
+// NewError creates a new AppError
+func NewError(errType ErrorType, code int, message string, opts ...ErrorOption) *AppError {
+	err := &AppError{
+		Type:    errType,
+		Message: message,
+		Code:    code,
+	}
+
+	for _, opt := range opts {
+		opt(err)
+	}
+
+	return err
+}
+
+// ErrorOption is a function that configures an AppError
+type ErrorOption func(*AppError)
+
+// WithField adds a field to the error
+func WithField(field string) ErrorOption {
+	return func(e *AppError) {
+		e.Field = field
+	}
+}
+
+// WithMetadata adds metadata to the error
+func WithMetadata(metadata map[string]interface{}) ErrorOption {
+	return func(e *AppError) {
+		e.Metadata = metadata
+	}
+}
+
+// WithCause adds a cause to the error
+func WithCause(cause error) ErrorOption {
+	return func(e *AppError) {
+		e.Cause = cause
+	}
+}
+
+// ValidationErrors represents multiple validation errors
+type ValidationErrors []*AppError
 
 func (e ValidationErrors) Error() string {
 	var errMessages []string
 	for _, err := range e {
 		errMessages = append(errMessages, err.Error())
 	}
-	return fmt.Sprintf("validation failed: %s", strings.Join(errMessages, ", "))
+	return strings.Join(errMessages, "; ")
 }
 
-// NotFoundError represents a not found error
-type NotFoundError struct {
-	Entity string
-	Field  string
-	Value  string
+// Common error constructors
+func NewValidationError(field, message string) *AppError {
+	return NewError(ValidationErrorType, 400, message, WithField(field))
 }
 
-func (e *NotFoundError) Error() string {
-	return fmt.Sprintf("%s not found with %s %s", e.Entity, e.Field, e.Value)
+func NewNotFoundError(entity, value string) *AppError {
+	return NewError(NotFoundErrorType, 404, fmt.Sprintf("%s not found: %s", entity, value))
 }
 
-// UnauthorizedError represents an unauthorized access error
-type UnauthorizedError struct {
-	Action string
+func NewUnauthorizedError(message string) *AppError {
+	return NewError(UnauthorizedType, 401, message)
 }
 
-func (e *UnauthorizedError) Error() string {
-	return fmt.Sprintf("unauthorized to perform action '%s'", e.Action)
+func NewInternalError(message string, cause error) *AppError {
+	return NewError(InternalServerType, 500, message, WithCause(cause))
 }
 
-// InternalServerError represents a generic internal server error
-type InternalServerError struct {
-	Message string
+func NewConflictError(message string) *AppError {
+	return NewError(ConflictType, 409, message)
 }
 
-func (e *InternalServerError) Error() string {
-	return fmt.Sprintf("internal server error: %s", e.Message)
+func NewBadRequestError(message string) *AppError {
+	return NewError(BadRequestType, 400, message)
 }
 
-// ConflictError represents a conflict error
-type ConflictError struct {
-	Entity string
+// Wrap wraps an error with a message and returns an AppError
+func Wrap(err error, message string) *AppError {
+	if err == nil {
+		return nil
+	}
+
+	if appErr, ok := err.(*AppError); ok {
+		return NewError(
+			appErr.Type,
+			appErr.Code,
+			fmt.Sprintf("%s: %s", message, appErr.Message),
+			WithCause(err),
+			WithField(appErr.Field),
+			WithMetadata(appErr.Metadata),
+		)
+	}
+
+	return NewError(
+		InternalServerType,
+		500,
+		fmt.Sprintf("%s: %s", message, err.Error()),
+		WithCause(err),
+	)
 }
 
-func (e *ConflictError) Error() string {
-	return fmt.Sprintf("%s conflict", e.Entity)
-}
-
-// BadRequestError represents a bad request error
-type BadRequestError struct {
-	Message string
-}
-
-func (e *BadRequestError) Error() string {
-	return fmt.Sprintf("bad request: %s", e.Message)
-}
-
-type InvalidCredentialsError struct{}
-
-func (e *InvalidCredentialsError) Error() string {
-	return "invalid credentials provided for authentication, please try again"
+// Wrapf wraps an error with a formatted message and returns an AppError
+func Wrapf(err error, format string, args ...interface{}) *AppError {
+	if err == nil {
+		return nil
+	}
+	return Wrap(err, fmt.Sprintf(format, args...))
 }

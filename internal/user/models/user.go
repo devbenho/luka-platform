@@ -28,7 +28,7 @@ func ValidateUser(user User) error {
 
 	var validationErrors errors.ValidationErrors
 	for _, err := range err.(validator.ValidationErrors) {
-		validationErrors = append(validationErrors, errors.NewValidationError(err.Field(), err.Tag(), err.Value().(string)))
+		validationErrors = append(validationErrors, errors.NewValidationError(err.Field(), err.Tag()))
 	}
 
 	return validationErrors

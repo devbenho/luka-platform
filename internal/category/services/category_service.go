@@ -2,9 +2,7 @@ package services
 
 import (
 	"context"
-	"fmt"
 	"log"
-	"time"
 
 	"github.com/devbenho/luka-platform/internal/category/dtos"
 	"github.com/devbenho/luka-platform/internal/category/models"
@@ -60,7 +58,7 @@ func (s *CategoryService) GetCategoryByID(ctx context.Context, id string) (*mode
 		return nil, err
 	}
 	if category.DeletedAt != nil {
-		return nil, &errors.NotFoundError{Entity: "category", Field: "id", Value: id}
+		return nil, errors.NewNotFoundError("category", id)
 	}
 	return category, nil
 }
@@ -79,7 +77,7 @@ func (s *CategoryService) UpdateCategory(ctx context.Context, id string, categor
 		return nil, err
 	}
 	if existingCategory.DeletedAt != nil {
-		return nil, &errors.NotFoundError{Entity: "category", Field: "id", Value: id}
+		return nil, errors.NewNotFoundError("category", id)
 	}
 
 	updatedCategory, _ := category.ToCategory()
@@ -99,10 +97,8 @@ func (s *CategoryService) DeleteCategory(ctx context.Context, id string) error {
 		return err
 	}
 	if category.DeletedAt != nil {
-		return &errors.NotFoundError{Entity: "category", Field: "id", Value: id}
+		return errors.NewNotFoundError("category", id)
 	}
-
-	category.DeletedAt = &time.Time{}
 	err = s.repo.UpdateCategory(ctx, id, category)
 	if err != nil {
 		return err
@@ -113,9 +109,8 @@ func (s *CategoryService) DeleteCategory(ctx context.Context, id string) error {
 
 func convertValidationErrors(validationErrors validator.ValidationErrors) errors.ValidationErrors {
 	var customErrors errors.ValidationErrors
-	for _, e := range validationErrors {
-		newError := errors.NewValidationError(e.Field(), e.Tag(), fmt.Sprintf("%v", e.Value()))
-		customErrors = append(customErrors, newError)
+	for _, err := range validationErrors {
+		customErrors = append(customErrors, errors.NewValidationError(err.Field(), err.Tag()))
 	}
 	return customErrors
 }

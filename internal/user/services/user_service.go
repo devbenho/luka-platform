@@ -2,7 +2,7 @@ package services
 
 import (
 	"context"
-	"fmt"
+	"net/http"
 
 	dtos "github.com/devbenho/luka-platform/internal/user/dtos/users"
 	"github.com/devbenho/luka-platform/internal/user/models"
@@ -79,18 +79,14 @@ func (s *UserService) Register(ctx context.Context, dto *dtos.CreateUserRequest)
 func (s *UserService) Login(ctx context.Context, dto *dtos.AuthDTO) (*dtos.AuthResponseDTO, error) {
 	existUser, err := s.FindUser(ctx, dto.Login)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "finding user")
 	}
 	if existUser == nil {
-		return nil, &errors.NotFoundError{
-			Entity: "user",
-			Field:  "login key",
-			Value:  dto.Login,
-		}
+		return nil, errors.NewNotFoundError("user", dto.Login)
 	}
 
 	if err := s.hasher.Compare(existUser.Password, dto.Password); err != nil {
-		return nil, &errors.InvalidCredentialsError{}
+		return nil, errors.NewError(errors.InvalidCredentials, http.StatusUnauthorized, "invalid credentials")
 	}
 
 	payload := map[string]interface{}{
@@ -110,7 +106,10 @@ func (s *UserService) Login(ctx context.Context, dto *dtos.AuthDTO) (*dtos.AuthR
 func (s *UserService) GetUserByID(ctx context.Context, id string) (*dtos.UserResponseDTO, error) {
 	user, err := s.repo.GetUserByID(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "getting user by ID")
+	}
+	if user == nil {
+		return nil, errors.NewNotFoundError("user", id)
 	}
 	return &dtos.UserResponseDTO{
 		ID:       user.ID.Hex(),
@@ -123,13 +122,21 @@ func (s *UserService) GetUserByID(ctx context.Context, id string) (*dtos.UserRes
 func (s *UserService) UpdateUser(ctx context.Context, id string, user *dtos.UpdateUserRequest) (*dtos.UserResponseDTO, error) {
 	existingUser, err := s.repo.GetUserByID(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "fetching user")
+	}
+	if existingUser == nil {
+		return nil, errors.NewNotFoundError("user", id)
 	}
 
-	if err := s.repo.UpdateUser(ctx, id, existingUser); err != nil {
-		return nil, err
+	if err := s.validator.ValidateStruct(user); err != nil {
+		return nil, errors.Wrap(err, "validating update request")
 	}
+
 	utils.Copy(existingUser, user)
+	if err := s.repo.UpdateUser(ctx, id, existingUser); err != nil {
+		return nil, errors.Wrap(err, "updating user in database")
+	}
+
 	return &dtos.UserResponseDTO{
 		ID:       existingUser.ID.Hex(),
 		Username: existingUser.Username,
@@ -155,11 +162,7 @@ func (s *UserService) FindUser(ctx context.Context, login string) (*models.User,
 	user, err = s.repo.GetUserByUsername(ctx, login)
 
 	if err != nil {
-		return nil, &errors.NotFoundError{
-			Entity: "user",
-			Field:  "login key",
-			Value:  login,
-		}
+		return nil, errors.NewNotFoundError("user", login)
 	}
 
 	return user, nil
@@ -168,7 +171,7 @@ func (s *UserService) FindUser(ctx context.Context, login string) (*models.User,
 func convertValidationErrors(validationErrors validator.ValidationErrors) errors.ValidationErrors {
 	var customErrors errors.ValidationErrors
 	for _, e := range validationErrors {
-		newError := errors.NewValidationError(e.Field(), e.Tag(), fmt.Sprintf("%v", e.Value()))
+		newError := errors.NewValidationError(e.Field(), e.Tag())
 		customErrors = append(customErrors, newError)
 	}
 

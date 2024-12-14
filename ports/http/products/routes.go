@@ -4,6 +4,7 @@ import (
 	configs "github.com/devbenho/luka-platform/configs"
 	"github.com/devbenho/luka-platform/internal/product/repositories"
 	"github.com/devbenho/luka-platform/internal/product/services"
+	storeRepo "github.com/devbenho/luka-platform/internal/store/repositories"
 	"github.com/devbenho/luka-platform/pkg/database"
 	middleware "github.com/devbenho/luka-platform/pkg/middlewares"
 	"github.com/devbenho/luka-platform/pkg/validation"
@@ -12,7 +13,8 @@ import (
 
 func Routes(r *gin.RouterGroup, mongoDb database.IDatabase, validator *validation.Validator, config configs.Config) {
 	productRepo := repositories.NewProductRepository(mongoDb)
-	productSvc := services.NewProductService(productRepo, validator)
+	storeRepo := storeRepo.NewStoreRepository(mongoDb)
+	productSvc := services.NewProductService(productRepo, storeRepo, validator)
 	productHandler := NewProductHandler(productSvc)
 
 	productsRoute := r.Group("/products")

@@ -59,11 +59,10 @@ func (s *InventoryService) UpdateInventory(ctx context.Context, id string, updat
 		return nil, fmt.Errorf("failed to fetch inventory: %w", err)
 	}
 	if existingInventory == nil {
-		return nil, &errors.NotFoundError{
-			Entity: "inventory",
-			Field:  "id",
-			Value:  id,
-		}
+		return nil, errors.NewNotFoundError(
+			"inventory",
+			id,
+		)
 	}
 
 	utils.Copy(existingInventory, updateBody)
@@ -82,11 +81,7 @@ func (s *InventoryService) DeleteInventory(ctx context.Context, id string) error
 func (s *InventoryService) GetInventoryByID(ctx context.Context, id string) (*models.Inventory, error) {
 	existInventory, err := s.repo.GetInventoryByID(ctx, id)
 	if err != nil {
-		return nil, &errors.NotFoundError{
-			Entity: "inventory",
-			Field:  "id",
-			Value:  id,
-		}
+		return nil, errors.NewNotFoundError("inventory", id)
 	}
 
 	return existInventory, nil
@@ -95,7 +90,7 @@ func (s *InventoryService) GetInventoryByID(ctx context.Context, id string) (*mo
 func convertValidationErrors(validationErrors validator.ValidationErrors) errors.ValidationErrors {
 	var customErrors errors.ValidationErrors
 	for _, e := range validationErrors {
-		newError := errors.NewValidationError(e.Field(), e.Tag(), fmt.Sprintf("%v", e.Value()))
+		newError := errors.NewValidationError(e.Field(), e.Tag())
 		customErrors = append(customErrors, newError)
 	}
 

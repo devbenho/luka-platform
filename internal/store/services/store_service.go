@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
 
 	dtos "github.com/devbenho/luka-platform/internal/store/dtos"
 	"github.com/devbenho/luka-platform/internal/store/models"
@@ -33,18 +32,14 @@ func NewStoreService(repository repositories.IStoreRepository, validator *valida
 }
 
 func (s *StoreService) CreateStore(ctx context.Context, store *dtos.CreateStoreRequest) (*dtos.CreateStoreResponse, error) {
-	log.Println(`Context is `, ctx)
-	if err := store.Validate(); err != nil {
-		if validationErrors, ok := err.(validator.ValidationErrors); ok {
-			validationErrorsResult := convertValidationErrors(validationErrors)
-			return nil, validationErrorsResult
-		}
-		return nil, err
+	if err := s.validator.ValidateStruct(store); err != nil {
+		return nil, errors.Wrap(err, "validating store")
 	}
-	log.Println(`The store entity is `, store.ToStore())
-	storeResult, err := s.repo.CreateStore(ctx, store.ToStore())
+
+	storeEntity := store.ToStore()
+	storeResult, err := s.repo.CreateStore(ctx, storeEntity)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "creating store in database")
 	}
 
 	return &dtos.CreateStoreResponse{
@@ -57,46 +52,38 @@ func (s *StoreService) CreateStore(ctx context.Context, store *dtos.CreateStoreR
 func (s *StoreService) GetStoreByID(ctx context.Context, id string) (*models.Store, error) {
 	store, err := s.repo.GetStoreByID(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "fetching store")
 	}
 	if store.DeletedAt != nil {
-		return nil, &errors.NotFoundError{Entity: "store", Field: "id", Value: id}
+		return nil, errors.NewNotFoundError("store", id)
 	}
 	return store, nil
 }
 
 func (s *StoreService) UpdateStore(ctx context.Context, id string, store *dtos.UpdateStoreRequest) (*models.Store, error) {
-	if err := store.Validate(); err != nil {
-		if validationErrors, ok := err.(validator.ValidationErrors); ok {
-			validationErrorsResult := convertValidationErrors(validationErrors)
-			return nil, validationErrorsResult
-		}
-		return nil, err
+	if err := s.validator.ValidateStruct(store); err != nil {
+		return nil, errors.Wrap(err, "validating store update")
 	}
 
 	existingStore, err := s.repo.GetStoreByID(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "fetching existing store")
 	}
 	if existingStore.DeletedAt != nil {
-		return nil, &errors.NotFoundError{Entity: "store", Field: "id", Value: id}
+		return nil, errors.NewNotFoundError("store", id)
+	}
+
+	userID, ok := ctx.Value("user_id").(string)
+	if !ok || userID != existingStore.OwnerId.String() {
+		return nil, errors.NewUnauthorizedError("not authorized to update this store")
 	}
 
 	updatedStore := store.ToStore()
 	updatedStore.ID = existingStore.ID
 	updatedStore.OwnerId = existingStore.OwnerId
-	userID, ok := ctx.Value("user_id").(string)
-	if !ok || userID != updatedStore.OwnerId.String() {
-		return nil, &errors.UnauthorizedError{Action: "update"}
-	}
-	err = s.repo.UpdateStore(ctx, id, updatedStore)
-	if err != nil {
-		return nil, err
-	}
 
-	err = s.repo.UpdateStore(ctx, id, updatedStore)
-	if err != nil {
-		return nil, err
+	if err = s.repo.UpdateStore(ctx, id, updatedStore); err != nil {
+		return nil, errors.Wrap(err, "updating store in database")
 	}
 
 	return updatedStore, nil
@@ -104,20 +91,15 @@ func (s *StoreService) UpdateStore(ctx context.Context, id string, store *dtos.U
 
 func (s *StoreService) DeleteStore(ctx context.Context, id string) error {
 	store, err := s.repo.GetStoreByID(ctx, id)
-	log.Println(`The store entity is `, store)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "fetching store")
 	}
 	if store.DeletedAt != nil {
-		return &errors.NotFoundError{
-			Entity: "store",
-			Field:  "id",
-			Value:  id,
-		}
+		return errors.NewNotFoundError("store", id)
 	}
 
 	if err := s.repo.DeleteStore(ctx, id); err != nil {
-		return err
+		return errors.Wrap(err, "deleting store")
 	}
 	return nil
 }
@@ -125,9 +107,11 @@ func (s *StoreService) DeleteStore(ctx context.Context, id string) error {
 func convertValidationErrors(validationErrors validator.ValidationErrors) errors.ValidationErrors {
 	var customErrors errors.ValidationErrors
 	for _, e := range validationErrors {
-		newError := errors.NewValidationError(e.Field(), e.Tag(), fmt.Sprintf("%v", e.Value()))
+		newError := errors.NewValidationError(
+			e.Field(),
+			fmt.Sprintf("validation failed for tag %s", e.Tag()),
+		)
 		customErrors = append(customErrors, newError)
 	}
-
 	return customErrors
 }
