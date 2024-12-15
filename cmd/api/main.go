@@ -6,7 +6,6 @@ import (
 	config "github.com/devbenho/luka-platform/configs"
 	httpServer "github.com/devbenho/luka-platform/internal/server/http"
 	"github.com/devbenho/luka-platform/pkg/database"
-	"github.com/devbenho/luka-platform/pkg/validation"
 )
 
 func main() {
@@ -16,8 +15,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Cannot connect to database", err)
 	}
-	validator := validation.NewValidator()
-	httpSvr := httpServer.NewServer(validator, db)
+	httpSvr := httpServer.NewServer(db)
 	log.Printf("Starting server on port %s", cfg.App.Port)
 	if err = httpSvr.Run(); err != nil {
 		log.Fatal(err)

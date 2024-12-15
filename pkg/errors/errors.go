@@ -1,147 +1,98 @@
-package errors
+package apperror
 
 import (
-	"fmt"
+	"errors"
+	"net/http"
 	"strings"
+
+	"github.com/devbenho/luka-platform/internal/shared/constants"
 )
 
-type ErrorType string
-
-const (
-	ValidationErrorType ErrorType = "VALIDATION_ERROR"
-	NotFoundErrorType   ErrorType = "NOT_FOUND"
-	UnauthorizedType    ErrorType = "UNAUTHORIZED"
-	InternalServerType  ErrorType = "INTERNAL_SERVER_ERROR"
-	ConflictType        ErrorType = "CONFLICT"
-	BadRequestType      ErrorType = "BAD_REQUEST"
-	InvalidCredentials  ErrorType = "INVALID_CREDENTIALS"
+var (
+	ErrEmailAlreadyExist         = errors.New(constants.ErrEmailAlreadyExist)
+	ErrorUsernameAlreadyExist    = errors.New(constants.ErrUsernameAlreadyExist)
+	ErrInvalidUserType           = errors.New(constants.ErrInvalidUserType)
+	ErrInvalidPassword           = errors.New(constants.ErrInvalidPassword)
+	ErrFailedGenerateJWT         = errors.New(constants.ErrFailedGenerateJWT)
+	ErrInvalidIsActive           = errors.New(constants.ErrInvalidIsActive)
+	ErrStatusValue               = errors.New(constants.ErrStatusValue)
+	ErrFailedGetTokenInformation = errors.New(constants.ErrFailedGetTokenInformation)
 )
 
-// AppError is the base error type for the application
 type AppError struct {
-	Type     ErrorType              `json:"type"`
-	Message  string                 `json:"message"`
-	Field    string                 `json:"field,omitempty"`
-	Code     int                    `json:"code"`
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
-	Cause    error                  `json:"-"`
+	Code    int
+	Err     error
+	Message string
 }
 
-func (e *AppError) Error() string {
-	if e.Field != "" {
-		return fmt.Sprintf("%s: %s (field: %s)", e.Type, e.Message, e.Field)
-	}
-	return fmt.Sprintf("%s: %s", e.Type, e.Message)
+func Equals(err error, expectedErr error) bool {
+	return strings.EqualFold(err.Error(), expectedErr.Error())
 }
 
-func (e *AppError) Unwrap() error {
-	return e.Cause
+func (h AppError) Error() string {
+	return h.Err.Error()
 }
 
-// NewError creates a new AppError
-func NewError(errType ErrorType, code int, message string, opts ...ErrorOption) *AppError {
-	err := &AppError{
-		Type:    errType,
-		Message: message,
-		Code:    code,
-	}
-
-	for _, opt := range opts {
-		opt(err)
-	}
-
-	return err
-}
-
-// ErrorOption is a function that configures an AppError
-type ErrorOption func(*AppError)
-
-// WithField adds a field to the error
-func WithField(field string) ErrorOption {
-	return func(e *AppError) {
-		e.Field = field
+func BadRequest(err error) error {
+	return &AppError{
+		Code:    http.StatusBadRequest,
+		Message: constants.ErrBadRequest,
+		Err:     err,
 	}
 }
 
-// WithMetadata adds metadata to the error
-func WithMetadata(metadata map[string]interface{}) ErrorOption {
-	return func(e *AppError) {
-		e.Metadata = metadata
+func InternalServerError(err error) error {
+	return &AppError{
+		Code:    http.StatusInternalServerError,
+		Message: constants.ErrInternalServerError,
+		Err:     err,
 	}
 }
 
-// WithCause adds a cause to the error
-func WithCause(cause error) ErrorOption {
-	return func(e *AppError) {
-		e.Cause = cause
+func Unauthorized(err error) error {
+	return &AppError{
+		Code:    http.StatusUnauthorized,
+		Message: constants.ErrUnauthorized,
+		Err:     err,
 	}
 }
 
-// ValidationErrors represents multiple validation errors
-type ValidationErrors []*AppError
-
-func (e ValidationErrors) Error() string {
-	var errMessages []string
-	for _, err := range e {
-		errMessages = append(errMessages, err.Error())
+func Forbidden(err error) error {
+	return &AppError{
+		Code:    http.StatusForbidden,
+		Message: constants.ErrForbidden,
+		Err:     err,
 	}
-	return strings.Join(errMessages, "; ")
 }
 
-// Common error constructors
-func NewValidationError(field, message string) *AppError {
-	return NewError(ValidationErrorType, 400, message, WithField(field))
-}
-
-func NewNotFoundError(entity, value string) *AppError {
-	return NewError(NotFoundErrorType, 404, fmt.Sprintf("%s not found: %s", entity, value))
-}
-
-func NewUnauthorizedError(message string) *AppError {
-	return NewError(UnauthorizedType, 401, message)
-}
-
-func NewInternalError(message string, cause error) *AppError {
-	return NewError(InternalServerType, 500, message, WithCause(cause))
-}
-
-func NewConflictError(message string) *AppError {
-	return NewError(ConflictType, 409, message)
-}
-
-func NewBadRequestError(message string) *AppError {
-	return NewError(BadRequestType, 400, message)
-}
-
-// Wrap wraps an error with a message and returns an AppError
-func Wrap(err error, message string) *AppError {
-	if err == nil {
-		return nil
+func NotFound(err error) error {
+	return &AppError{
+		Code:    http.StatusNotFound,
+		Message: constants.ErrNotFound,
+		Err:     err,
 	}
-
-	if appErr, ok := err.(*AppError); ok {
-		return NewError(
-			appErr.Type,
-			appErr.Code,
-			fmt.Sprintf("%s: %s", message, appErr.Message),
-			WithCause(err),
-			WithField(appErr.Field),
-			WithMetadata(appErr.Metadata),
-		)
-	}
-
-	return NewError(
-		InternalServerType,
-		500,
-		fmt.Sprintf("%s: %s", message, err.Error()),
-		WithCause(err),
-	)
 }
 
-// Wrapf wraps an error with a formatted message and returns an AppError
-func Wrapf(err error, format string, args ...interface{}) *AppError {
-	if err == nil {
-		return nil
+func Conflict(err error) error {
+	return &AppError{
+		Code:    http.StatusConflict,
+		Message: constants.ErrConflict,
+		Err:     err,
 	}
-	return Wrap(err, fmt.Sprintf(format, args...))
+}
+
+func GatewayTimeout(err error) error {
+	return &AppError{
+		Code:    http.StatusGatewayTimeout,
+		Message: constants.ErrGatewayTimeout,
+		Err:     err,
+	}
+}
+
+func ServiceUnavailable(err error) error {
+	return &AppError{
+		Code:    http.StatusServiceUnavailable,
+		Message: constants.ErrGatewayTimeout,
+		Err:     err,
+	}
 }

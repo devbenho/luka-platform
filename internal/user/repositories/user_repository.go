@@ -15,9 +15,9 @@ import (
 
 // IUserRepository defines the methods that any repository implementation must have.
 type IUserRepository interface {
-	CreateUser(ctx context.Context, user *models.User) error
+	CreateUser(ctx context.Context, user *models.User) (models.User, error)
 	GetUserByID(ctx context.Context, id string) (*models.User, error)
-	IsUserExists(ctx context.Context, login string) (bool, error)
+	IsUserExists(ctx context.Context, login string) bool
 	UpdateUser(ctx context.Context, id string, user *models.User) error
 	DeleteUser(ctx context.Context, id string) error
 	GetUserByEmail(ctx context.Context, email string) (*models.User, error)
@@ -25,8 +25,8 @@ type IUserRepository interface {
 }
 
 type userRepository struct {
-	db     database.IDatabase
-	mu     sync.RWMutex
+	db database.IDatabase
+	mu sync.RWMutex
 }
 
 func NewUserRepository(db database.IDatabase) IUserRepository {
@@ -36,7 +36,7 @@ func NewUserRepository(db database.IDatabase) IUserRepository {
 }
 
 // CreateUser inserts a new user into the database
-func (r *userRepository) CreateUser(ctx context.Context, user *models.User) error {
+func (r *userRepository) CreateUser(ctx context.Context, user *models.User) (models.User, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -44,7 +44,11 @@ func (r *userRepository) CreateUser(ctx context.Context, user *models.User) erro
 	user.CreatedAt = time.Now()
 	user.UpdatedAt = time.Now()
 
-	return r.db.Create(ctx, "users", user)
+	if err := r.db.Create(ctx, "users", user); err != nil {
+		return models.User{}, mapMongoError(err, "user")
+	}
+
+	return *user, nil
 }
 
 // GetUserByID fetches a user by their ID from the database
@@ -107,7 +111,7 @@ func (r *userRepository) DeleteUser(ctx context.Context, id string) error {
 }
 
 // IsUserExists checks if a user with the given login already exists in the database
-func (r *userRepository) IsUserExists(ctx context.Context, login string) (bool, error) {
+func (r *userRepository) IsUserExists(ctx context.Context, login string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -118,9 +122,9 @@ func (r *userRepository) IsUserExists(ctx context.Context, login string) (bool, 
 
 	count, err := r.db.Count(ctx, "users", filter)
 	if err != nil {
-		return false, err
+		return false
 	}
-	return count > 0, nil
+	return count > 0
 }
 
 // GetUserByEmail fetches a user by their email from the database

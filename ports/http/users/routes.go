@@ -7,18 +7,21 @@ import (
 	"github.com/devbenho/luka-platform/pkg/database"
 	"github.com/devbenho/luka-platform/pkg/hasher"
 	"github.com/devbenho/luka-platform/pkg/tokens"
-	"github.com/devbenho/luka-platform/pkg/validation"
 	"github.com/gin-gonic/gin"
 )
 
-func Routes(r *gin.RouterGroup, mongoDb database.IDatabase, validator *validation.Validator, config configs.Config) {
+func Routes(r *gin.RouterGroup, mongoDb database.IDatabase, config configs.Config) {
 	userRepo := repositories.NewUserRepository(mongoDb)
-	userSvc := services.NewUserService(validator, tokens.NewTokenService(config.JWT.Secret), userRepo, hasher.NewHasher())
+	userSvc := services.NewUserService(tokens.NewTokenService(config.JWT.Secret), userRepo, hasher.NewHasher())
 	userHandler := NewUserHandler(userSvc)
 
 	authRoute := r.Group("/auth")
 	{
-		authRoute.POST("/register", userHandler.Register)
-		authRoute.POST("/login", userHandler.Login)
+		authRoute.POST("/register", func(c *gin.Context) {
+			if err := userHandler.Register(c); err != nil {
+				c.JSON(500, gin.H{"error": err.Error()})
+			}
+		})
+		// authRoute.POST("/login", userHandler.Login)
 	}
 }

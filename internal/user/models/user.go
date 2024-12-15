@@ -3,8 +3,6 @@ package models
 import (
 	"time"
 
-	"github.com/devbenho/luka-platform/pkg/errors"
-	"github.com/go-playground/validator/v10"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -17,20 +15,4 @@ type User struct {
 	CreatedAt time.Time          `bson:"created_at"`
 	UpdatedAt time.Time          `bson:"updated_at"`
 	DeletedAt *time.Time         `bson:"deleted_at"`
-}
-
-func ValidateUser(user User) error {
-	validate := validator.New()
-	err := validate.Struct(user)
-	if err == nil {
-		return nil
-	}
-
-	var validationErrors errors.ValidationErrors
-	for _, err := range err.(validator.ValidationErrors) {
-		validationErrors = append(validationErrors, errors.NewValidationError(err.Field(), err.Tag()))
-	}
-
-	return validationErrors
-
 }
