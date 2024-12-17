@@ -2,28 +2,27 @@ package dtos
 
 import (
 	"github.com/devbenho/luka-platform/internal/inventory/models"
-	"github.com/go-playground/validator/v10"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type CreateInventoryRequest struct {
-	ProductId primitive.ObjectID `json:"product_id" validate:"required"`
-	Quantity  int                `json:"quantity" validate:"required,gte=0"`
-	Status    string             `json:"status" validate:"required,oneof=in_stock out_of_stock low_stock"`
+	ProductID   primitive.ObjectID `json:"product_id" validate:"required"`
+	WarehouseID primitive.ObjectID `json:"warehouse_id" validate:"required"`
+	StoreID     primitive.ObjectID `json:"store_id" validate:"required"`
+	Quantity    int                `json:"quantity" validate:"required,gte=0"`
+	MinQuantity int                `json:"min_quantity" validate:"required,gte=0"`
+	MaxQuantity int                `json:"max_quantity" validate:"required,gtfield=MinQuantity"`
 }
 
 func (r *CreateInventoryRequest) ToInventory() *models.Inventory {
-	return &models.Inventory{
-		ProductId: r.ProductId,
-		Quantity:  r.Quantity,
-		Status:    r.Status,
+	inventory := &models.Inventory{
+		ProductID:   r.ProductID,
+		WarehouseID: r.WarehouseID,
+		StoreID:     r.StoreID,
+		Quantity:    r.Quantity,
+		MinQuantity: r.MinQuantity,
+		MaxQuantity: r.MaxQuantity,
 	}
-}
-
-func (r *CreateInventoryRequest) Validate() error {
-	validator := validator.New()
-	if err := validator.Struct(r); err != nil {
-		return err
-	}
-	return nil
+	inventory.UpdateStatus()
+	return inventory
 }

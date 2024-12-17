@@ -34,7 +34,10 @@ func NewInventoryService(repo repositories.IInventoryRepository, validator *vali
 
 func (s *InventoryService) CreateInventory(ctx context.Context, dto dtos.CreateInventoryRequest) (*models.Inventory, error) {
 	if err := s.validator.ValidateStruct(dto); err != nil {
-		return nil, fmt.Errorf("invalid create request: %w", err)
+		if validationErrors, ok := err.(errors.ValidationErrors); ok {
+			return nil, validationErrors
+		}
+		return nil, err
 	}
 	inventory := dto.ToInventory()
 	return s.repo.CreateInventory(ctx, inventory)

@@ -13,6 +13,6 @@ type UpdateInventoryRequest struct {
 
 func (dto *UpdateInventoryRequest) ToInventory() *models.Inventory {
 	return &models.Inventory{
-		ProductId: *dto.ProductId,
+		ProductID: *dto.ProductId,
 	}
 }

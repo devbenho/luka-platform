@@ -8,6 +8,7 @@ import (
 	"github.com/devbenho/luka-platform/pkg/database"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type IInventoryRepository interface {
@@ -15,6 +16,9 @@ type IInventoryRepository interface {
 	GetInventoryByID(ctx context.Context, id string) (*models.Inventory, error)
 	UpdateInventory(ctx context.Context, id string, inventory *models.Inventory) error
 	DeleteInventory(ctx context.Context, id string) error
+	GetInventoryByWarehouse(ctx context.Context, warehouseID primitive.ObjectID) ([]*models.Inventory, error)
+	GetProductInventoryAcrossWarehouses(ctx context.Context, productID primitive.ObjectID) ([]*models.Inventory, error)
+	TransferInventory(ctx context.Context, fromWarehouseID, toWarehouseID primitive.ObjectID, productID primitive.ObjectID, quantity int) error
 }
 
 type InventoryRepository struct {
@@ -69,4 +73,43 @@ func (r *InventoryRepository) DeleteInventory(ctx context.Context, id string) er
 	}
 	filter := bson.M{"_id": objID}
 	return r.db.Delete(ctx, "inventories", filter)
+}
+
+func (r *InventoryRepository) GetInventoryByWarehouse(ctx context.Context, warehouseID primitive.ObjectID) ([]*models.Inventory, error) {
+	var inventories []*models.Inventory
+	filter := bson.M{"warehouse_id": warehouseID, "deleted_at": nil}
+	err := r.db.Find(ctx, "inventories", filter, &inventories)
+	return inventories, err
+}
+
+func (r *InventoryRepository) GetProductInventoryAcrossWarehouses(ctx context.Context, productID primitive.ObjectID) ([]*models.Inventory, error) {
+	var inventories []*models.Inventory
+	filter := bson.M{"product_id": productID, "deleted_at": nil}
+	err := r.db.Find(ctx, "inventories", filter, &inventories)
+	return inventories, err
+}
+
+func (r *InventoryRepository) TransferInventory(ctx context.Context, fromWarehouseID, toWarehouseID primitive.ObjectID, productID primitive.ObjectID, quantity int) error {
+	return r.db.WithTransaction(ctx, func(sessCtx mongo.SessionContext) error {
+		// Deduct from source warehouse
+		fromFilter := bson.M{
+			"warehouse_id": fromWarehouseID,
+			"product_id":   productID,
+			"quantity":     bson.M{"$gte": quantity},
+		}
+		fromUpdate := bson.M{"$inc": bson.M{"quantity": -quantity}}
+
+		// Add to destination warehouse
+		toFilter := bson.M{
+			"warehouse_id": toWarehouseID,
+			"product_id":   productID,
+		}
+		toUpdate := bson.M{"$inc": bson.M{"quantity": quantity}}
+
+		if err := r.db.Update(sessCtx, "inventories", fromFilter, fromUpdate); err != nil {
+			return err
+		}
+
+		return r.db.Update(sessCtx, "inventories", toFilter, toUpdate)
+	})
 }
