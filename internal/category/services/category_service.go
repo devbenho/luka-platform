@@ -2,14 +2,12 @@ package services
 
 import (
 	"context"
-	"log"
 
 	"github.com/devbenho/luka-platform/internal/category/dtos"
 	"github.com/devbenho/luka-platform/internal/category/models"
 	"github.com/devbenho/luka-platform/internal/category/repositories"
 	"github.com/devbenho/luka-platform/pkg/errors"
 	"github.com/devbenho/luka-platform/pkg/validation"
-	"github.com/go-playground/validator/v10"
 )
 
 type ICategoryService interface {
@@ -32,17 +30,15 @@ func NewCategoryService(repository repositories.ICategoryRepository, validator *
 }
 
 func (s *CategoryService) CreateCategory(ctx context.Context, category *dtos.CreateCategoryRequest) (*dtos.CreateCategoryResponse, error) {
-	log.Println(`Context is `, ctx)
-	if err := category.Validate(); err != nil {
-		if validationErrors, ok := err.(validator.ValidationErrors); ok {
-			validationErrorsResult := convertValidationErrors(validationErrors)
+	if err := s.validator.ValidateStruct(category); err != nil {
+		if validationErrors, ok := err.(errors.ValidationErrors); ok {
+			validationErrorsResult := validationErrors
 			return nil, validationErrorsResult
 		}
 		return nil, err
 	}
 	categoryResult, err := s.repo.CreateCategory(ctx, category.ToCategory())
 
-	log.Print(2)
 	if err != nil {
 		return nil, err
 	}
@@ -64,10 +60,9 @@ func (s *CategoryService) GetCategoryByID(ctx context.Context, id string) (*mode
 }
 
 func (s *CategoryService) UpdateCategory(ctx context.Context, id string, category *dtos.UpdateCategoryRequest) (*models.Category, error) {
-	if err := category.Validate(); err != nil {
-		if validationErrors, ok := err.(validator.ValidationErrors); ok {
-			validationErrorsResult := convertValidationErrors(validationErrors)
-			return nil, validationErrorsResult
+	if err := s.validator.ValidateStruct(category); err != nil {
+		if validationErrors, ok := err.(errors.ValidationErrors); ok {
+			return nil, validationErrors
 		}
 		return nil, err
 	}
@@ -105,12 +100,4 @@ func (s *CategoryService) DeleteCategory(ctx context.Context, id string) error {
 	}
 
 	return nil
-}
-
-func convertValidationErrors(validationErrors validator.ValidationErrors) errors.ValidationErrors {
-	var customErrors errors.ValidationErrors
-	for _, err := range validationErrors {
-		customErrors = append(customErrors, errors.NewValidationError(err.Field(), err.Tag()))
-	}
-	return customErrors
 }

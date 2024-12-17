@@ -15,7 +15,6 @@ import (
 	"github.com/devbenho/luka-platform/internal/utils"
 	"github.com/devbenho/luka-platform/pkg/errors"
 	"github.com/devbenho/luka-platform/pkg/validation"
-	"github.com/go-playground/validator/v10"
 )
 
 type IOrderService interface {
@@ -47,8 +46,12 @@ func NewOrderService(
 }
 
 func (s *OrderService) CreateOrder(ctx context.Context, dto dtos.CreateOrderRequest) (*models.Order, error) {
-	if err := s.validator.ValidateStruct(&dto); err != nil {
-		return nil, errors.Wrap(err, "validating order request")
+	if err := s.validator.ValidateStruct(dto); err != nil {
+		if validationErrors, ok := err.(errors.ValidationErrors); ok {
+			validationErrorsResult := validationErrors
+			return nil, validationErrorsResult
+		}
+		return nil, err
 	}
 
 	orderItems, totalAmount, err := s.prepareOrderItems(ctx, dto.Items)
@@ -65,7 +68,6 @@ func (s *OrderService) CreateOrder(ctx context.Context, dto dtos.CreateOrderRequ
 	createdOrder, err := s.repo.CreateOrder(ctx, order)
 	if err != nil {
 		s.rollbackInventory(ctx, orderItems)
-		// Use NewError when we need to add metadata
 		return nil, errors.NewError(
 			errors.InternalServerType,
 			500,
@@ -256,14 +258,4 @@ func (s *OrderService) ListOrders(ctx context.Context, customerID string) ([]mod
 	}
 
 	return orders, nil
-}
-
-func convertValidationErrors(validationErrors validator.ValidationErrors) errors.ValidationErrors {
-	var customErrors errors.ValidationErrors
-	for _, e := range validationErrors {
-		newError := errors.NewValidationError(e.Field(), e.Tag())
-		customErrors = append(customErrors, newError)
-	}
-
-	return customErrors
 }

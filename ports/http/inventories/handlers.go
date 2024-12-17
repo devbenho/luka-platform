@@ -1,7 +1,6 @@
 package inventories
 
 import (
-	"log"
 	"net/http"
 
 	"github.com/devbenho/luka-platform/internal/inventory/dtos"
@@ -45,7 +44,6 @@ func (h *InventoryHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, utils.NewErrorResponse(http.StatusBadRequest, "Invalid input", err.Error()))
 		return
 	}
-	log.Println(`The update inventory request is `, updateInventoryRequest)
 	inventory, err := h.service.UpdateInventory(c.Request.Context(), id, updateInventoryRequest)
 	if err != nil {
 		apiError := errors.MapErrorToHTTP(err)

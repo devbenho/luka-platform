@@ -2,14 +2,12 @@ package services
 
 import (
 	"context"
-	"fmt"
 
 	dtos "github.com/devbenho/luka-platform/internal/store/dtos"
 	"github.com/devbenho/luka-platform/internal/store/models"
 	"github.com/devbenho/luka-platform/internal/store/repositories"
 	"github.com/devbenho/luka-platform/pkg/errors"
 	"github.com/devbenho/luka-platform/pkg/validation"
-	"github.com/go-playground/validator/v10"
 )
 
 type IStoreService interface {
@@ -33,7 +31,10 @@ func NewStoreService(repository repositories.IStoreRepository, validator *valida
 
 func (s *StoreService) CreateStore(ctx context.Context, store *dtos.CreateStoreRequest) (*dtos.CreateStoreResponse, error) {
 	if err := s.validator.ValidateStruct(store); err != nil {
-		return nil, errors.Wrap(err, "validating store")
+		if validationErrors, ok := err.(errors.ValidationErrors); ok {
+			return nil, validationErrors
+		}
+		return nil, err
 	}
 
 	storeEntity := store.ToStore()
@@ -102,16 +103,4 @@ func (s *StoreService) DeleteStore(ctx context.Context, id string) error {
 		return errors.Wrap(err, "deleting store")
 	}
 	return nil
-}
-
-func convertValidationErrors(validationErrors validator.ValidationErrors) errors.ValidationErrors {
-	var customErrors errors.ValidationErrors
-	for _, e := range validationErrors {
-		newError := errors.NewValidationError(
-			e.Field(),
-			fmt.Sprintf("validation failed for tag %s", e.Tag()),
-		)
-		customErrors = append(customErrors, newError)
-	}
-	return customErrors
 }

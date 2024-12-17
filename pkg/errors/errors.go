@@ -2,7 +2,6 @@ package errors
 
 import (
 	"fmt"
-	"strings"
 )
 
 type ErrorType string
@@ -77,21 +76,7 @@ func WithCause(cause error) ErrorOption {
 	}
 }
 
-// ValidationErrors represents multiple validation errors
-type ValidationErrors []*AppError
-
-func (e ValidationErrors) Error() string {
-	var errMessages []string
-	for _, err := range e {
-		errMessages = append(errMessages, err.Error())
-	}
-	return strings.Join(errMessages, "; ")
-}
-
 // Common error constructors
-func NewValidationError(field, message string) *AppError {
-	return NewError(ValidationErrorType, 400, message, WithField(field))
-}
 
 func NewNotFoundError(entity, value string) *AppError {
 	return NewError(NotFoundErrorType, 404, fmt.Sprintf("%s not found: %s", entity, value))

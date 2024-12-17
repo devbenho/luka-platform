@@ -11,7 +11,6 @@ type APIError struct {
 	Status   int                    `json:"status"`
 	Message  string                 `json:"message"`
 	Type     string                 `json:"type"`
-	Field    string                 `json:"field,omitempty"`
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
@@ -30,12 +29,20 @@ func MapErrorToHTTP(err error) *APIError {
 			Status:   appErr.Code,
 			Message:  appErr.Message,
 			Type:     string(appErr.Type),
-			Field:    appErr.Field,
 			Metadata: appErr.Metadata,
 		}
 	}
-
-	// Default to internal server error for unknown error types
+	if validationErr, ok := err.(errors.ValidationErrors); ok {
+		return &APIError{
+			Success: false,
+			Status:  http.StatusBadRequest,
+			Message: "Validation error",
+			Type:    string(errors.ValidationErrorType),
+			Metadata: map[string]interface{}{
+				"errors": validationErr,
+			},
+		}
+	}
 	return &APIError{
 		Success: false,
 		Status:  http.StatusInternalServerError,

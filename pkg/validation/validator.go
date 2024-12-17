@@ -1,8 +1,6 @@
 package validation
 
 import (
-	"fmt"
-
 	"github.com/devbenho/luka-platform/pkg/errors"
 	"github.com/go-playground/validator/v10"
 )
@@ -25,10 +23,12 @@ func (v *Validator) ValidateStruct(s interface{}) error {
 		if validationErrors, ok := err.(validator.ValidationErrors); ok {
 			var appErrors errors.ValidationErrors
 			for _, e := range validationErrors {
-				appErrors = append(appErrors, errors.NewValidationError(
+				newError := errors.NewValidationError(
 					e.Field(),
-					fmt.Sprintf("failed %s validation", e.Tag()),
-				))
+					e.Tag(),
+					e.Value(),
+				)
+				appErrors = append(appErrors, newError)
 			}
 			return appErrors
 		}
@@ -37,7 +37,6 @@ func (v *Validator) ValidateStruct(s interface{}) error {
 	return nil
 }
 
-// ValidateField validates a field based on the tag
 func (v *Validator) ValidateField(field interface{}, tag string) error {
 	return v.validate.Var(field, tag)
 }

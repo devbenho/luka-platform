@@ -12,7 +12,6 @@ import (
 	"github.com/devbenho/luka-platform/pkg/hasher"
 	"github.com/devbenho/luka-platform/pkg/tokens"
 	"github.com/devbenho/luka-platform/pkg/validation"
-	"github.com/go-playground/validator/v10"
 )
 
 type IUserService interface {
@@ -47,9 +46,8 @@ func NewUserService(
 
 func (s *UserService) Register(ctx context.Context, dto *dtos.CreateUserRequest) (*dtos.CreateUserResponse, error) {
 	if err := s.validator.ValidateStruct(dto); err != nil {
-		if validationErrors, ok := err.(validator.ValidationErrors); ok {
-			validationErrorsResult := convertValidationErrors(validationErrors)
-			return nil, validationErrorsResult
+		if validationErrors, ok := err.(errors.ValidationErrors); ok {
+			return nil, validationErrors
 		}
 		return nil, err
 	}
@@ -166,14 +164,4 @@ func (s *UserService) FindUser(ctx context.Context, login string) (*models.User,
 	}
 
 	return user, nil
-}
-
-func convertValidationErrors(validationErrors validator.ValidationErrors) errors.ValidationErrors {
-	var customErrors errors.ValidationErrors
-	for _, e := range validationErrors {
-		newError := errors.NewValidationError(e.Field(), e.Tag())
-		customErrors = append(customErrors, newError)
-	}
-
-	return customErrors
 }
