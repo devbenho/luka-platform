@@ -31,3 +31,6 @@ go.work.sum
 
 # ignore vendor directory
 vendor
+
+# ignore private directory
+docs/private/
