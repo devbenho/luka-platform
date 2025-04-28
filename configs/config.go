@@ -23,6 +23,7 @@ type Config struct {
 		Secret string
 		Type   string
 	}
+	ALLOWED_ORIGINS string
 }
 
 var (
@@ -42,7 +43,7 @@ func LoadConfig() (*Config, error) {
 	config.Database.Name = os.Getenv("DB_NAME")
 	config.JWT.Secret = os.Getenv("JWT_SECRET")
 	config.JWT.Type = os.Getenv("JWT_TYPE")
-
+	config.ALLOWED_ORIGINS = os.Getenv("ALLOWED_ORIGINS")
 	if config.App.Port == "" || config.Database.URI == "" || config.Database.Name == "" || config.JWT.Secret == "" {
 		return &config, fmt.Errorf("missing required environment variables")
 	}
