@@ -29,8 +29,5 @@ go.work.sum
 # ignore .idea
 .idea
 
-# ignore vendor directory
-vendor
-
 # ignore private directory
 docs/private/
