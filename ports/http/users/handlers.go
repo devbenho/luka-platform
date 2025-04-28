@@ -1,6 +1,8 @@
 package users
 
 import (
+	"fmt"
+	"log"
 	"net/http"
 
 	dtos "github.com/devbenho/luka-platform/internal/user/dtos/users"
@@ -26,19 +28,25 @@ func NewUserHandler(service services.IUserService) *UserHandler {
 // @Accept json
 // @Produce json
 // @Param user body dtos.CreateUserRequest true "User details"
-// @Success 201 {object} utils.SuccessResponse
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 500 {object} utils.ErrorResponse
-// @Router /user [post]
+// @Success 201 {object} utils.Response
+// @Failure 400 {object} utils.Response
+// @Failure 500 {object} utils.Response
+// @Router /auth/register [post]
 func (h *UserHandler) Register(c *gin.Context) {
+	fmt.Println("register user handler")
 	var createUserRequest dtos.CreateUserRequest
 
 	if err := c.ShouldBindJSON(&createUserRequest); err != nil {
+		log.Println(err)
 		c.JSON(http.StatusBadRequest, utils.NewErrorResponse(http.StatusBadRequest, "Invalid input", err.Error()))
 		return
 	}
 
+	log.Println(createUserRequest)
+
 	result, err := h.service.Register(c.Request.Context(), &createUserRequest)
+	log.Println(result)
+	log.Println(err)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.NewErrorResponse(http.StatusInternalServerError, "Failed to register user", err.Error()))
 		return
@@ -55,9 +63,9 @@ func (h *UserHandler) Register(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param credentials body dtos.AuthDTO true "User credentials"
-// @Success 200 {object} dtos.AuthResponseDTO
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 401 {object} utils.ErrorResponse
+// @Success 200 {object} utils.Response
+// @Failure 400 {object} utils.Response
+// @Failure 401 {object} utils.Response
 // @Router /auth/login [post]
 func (h *UserHandler) Login(c *gin.Context) {
 	var authDTO dtos.AuthDTO
@@ -83,11 +91,12 @@ func (h *UserHandler) Login(c *gin.Context) {
 // @Tags users
 // @Produce json
 // @Param id path string true "User ID"
-// @Success 200 {object} dtos.UserResponseDTO
-// @Failure 404 {object} utils.ErrorResponse
-// @Router /user/{id} [get]
+// @Success 200 {object} utils.Response
+// @Failure 404 {object} utils.Response
+// @Security BearerAuth
+// @Router /users/{id} [get]
 func (h *UserHandler) GetUserByID(c *gin.Context) {
-	id := c.Param("id") // Get the user ID from the request path
+	id := c.Param("id")
 
 	user, err := h.service.GetUserByID(c.Request.Context(), id)
 	if err != nil {
@@ -106,10 +115,11 @@ func (h *UserHandler) GetUserByID(c *gin.Context) {
 // @Produce json
 // @Param id path string true "User ID"
 // @Param user body dtos.UpdateUserRequest true "Updated user details"
-// @Success 200 {object} dtos.UserResponseDTO
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 500 {object} utils.ErrorResponse
-// @Router /user/{id} [put]
+// @Success 200 {object} utils.Response
+// @Failure 400 {object} utils.Response
+// @Failure 500 {object} utils.Response
+// @Security BearerAuth
+// @Router /users/{id} [put]
 func (h *UserHandler) UpdateUser(c *gin.Context) {
 	id := c.Param("id")
 
@@ -134,8 +144,9 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 // @Tags users
 // @Param id path string true "User ID"
 // @Success 204
-// @Failure 500 {object} utils.ErrorResponse
-// @Router /user/{id} [delete]
+// @Failure 500 {object} utils.Response
+// @Security BearerAuth
+// @Router /users/{id} [delete]
 func (h *UserHandler) DeleteUser(c *gin.Context) {
 	id := c.Param("id")
 

@@ -22,17 +22,18 @@ func NewStoreHandler(service services.IStoreService) *StoreHandler {
 	}
 }
 
-// Create handles user registration requests
-// @Summary Create a new user
-// @Description Create a new user with the provided details
-// @Tags users
+// Create handles store creation requests
+// @Summary Create a new store
+// @Description Create a new store with the provided details
+// @Tags stores
 // @Accept json
 // @Produce json
-// @Param user body dtos.CreateUserRequest true "User details"
-// @Success 201 {object} utils.SuccessResponse
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 500 {object} utils.ErrorResponse
-// @Router /user [post]
+// @Param store body dtos.CreateStoreRequest true "Store details"
+// @Success 201 {object} utils.Response
+// @Failure 400 {object} utils.Response
+// @Failure 500 {object} utils.Response
+// @Security BearerAuth
+// @Router /stores [post]
 func (h *StoreHandler) Create(c *gin.Context) {
 	value, exists := c.Get("userId")
 	if !exists {
@@ -71,15 +72,17 @@ func (h *StoreHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, response)
 }
 
-// GetStores handles fetching all stores
-// @Summary Get all stores
-// @Description Fetch all stores
+// GetById handles fetching a store by ID
+// @Summary Get a store by ID
+// @Description Fetch a store by ID
 // @Tags stores
-// @Accept json
 // @Produce json
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 500 {object} utils.ErrorResponse
-// @Router /stores [get]
+// @Param id path string true "Store ID"
+// @Success 200 {object} utils.Response
+// @Failure 404 {object} utils.Response
+// @Failure 500 {object} utils.Response
+// @Security BearerAuth
+// @Router /stores/{id} [get]
 func (h *StoreHandler) GetById(c *gin.Context) {
 	id := c.Param("id")
 	store, err := h.service.GetStoreByID(c.Request.Context(), id)
@@ -101,9 +104,12 @@ func (h *StoreHandler) GetById(c *gin.Context) {
 // @Produce json
 // @Param id path string true "Store ID"
 // @Param store body dtos.UpdateStoreRequest true "Store details"
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 400 {object} utils.ErrorResponse
-// @Router /store/{id} [put]
+// @Success 200 {object} utils.Response
+// @Failure 400 {object} utils.Response
+// @Failure 404 {object} utils.Response
+// @Failure 500 {object} utils.Response
+// @Security BearerAuth
+// @Router /stores/{id} [put]
 func (h *StoreHandler) Update(c *gin.Context) {
 	id := c.Param("id")
 	var updateStoreRequest dtos.UpdateStoreRequest
@@ -127,12 +133,13 @@ func (h *StoreHandler) Update(c *gin.Context) {
 // @Summary Delete a store
 // @Description Delete a store with the provided ID
 // @Tags stores
-// @Accept json
 // @Produce json
 // @Param id path string true "Store ID"
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 400 {object} utils.ErrorResponse
-// @Router /store/{id} [delete]
+// @Success 200 {object} utils.Response
+// @Failure 404 {object} utils.Response
+// @Failure 500 {object} utils.Response
+// @Security BearerAuth
+// @Router /stores/{id} [delete]
 func (h *StoreHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	err := h.service.DeleteStore(c.Request.Context(), id)

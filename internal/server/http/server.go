@@ -16,6 +16,9 @@ import (
 	"github.com/devbenho/luka-platform/ports/http/stores"
 	"github.com/devbenho/luka-platform/ports/http/users"
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+	"go.uber.org/zap"
 )
 
 type Server struct {
@@ -23,15 +26,19 @@ type Server struct {
 	cfg       *config.Config
 	validator *validation.Validator
 	db        database.IDatabase
+	logger    *zap.Logger
 }
 
-func NewServer(validator *validation.Validator, db database.IDatabase) Server {
+func NewServer(validator *validation.Validator, db database.IDatabase, logger *zap.Logger) Server {
 	cfg, _ := config.LoadConfig()
+	router := gin.Default()
+
 	return Server{
-		engine:    gin.Default(),
+		engine:    router,
 		cfg:       cfg,
 		validator: validator,
 		db:        db,
+		logger:    logger,
 	}
 }
 
@@ -41,9 +48,17 @@ func (s Server) Run() error {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	// Add Swagger UI with custom configuration
+	swaggerURL := fmt.Sprintf("http://localhost:%s/swagger/doc.json", s.cfg.App.Port)
+
+	s.engine.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, func(c *ginSwagger.Config) {
+		c.URL = swaggerURL
+	}))
+
 	if err := s.MapRoutes(); err != nil {
 		log.Fatalf("MapRoutes Error: %v", err)
 	}
+
 	s.engine.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, utils.NewSuccessResponse(http.StatusOK, "pong", nil))
 	})
