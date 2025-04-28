@@ -28,9 +28,10 @@ func NewCategoryHandler(service services.ICategoryService) *CategoryHandler {
 // @Accept json
 // @Produce json
 // @Param category body dtos.CreateCategoryRequest true "Category details"
-// @Success 201 {object} utils.SuccessResponse
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 500 {object} utils.ErrorResponse
+// @Success 201 {object} utils.Response
+// @Failure 400 {object} utils.Response
+// @Failure 500 {object} utils.Response
+// @Security BearerAuth
 // @Router /categories [post]
 func (h *CategoryHandler) Create(c *gin.Context) {
 	var createCategoryRequest dtos.CreateCategoryRequest
@@ -58,8 +59,9 @@ func (h *CategoryHandler) Create(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path string true "Category ID"
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 500 {object} utils.ErrorResponse
+// @Success 200 {object} utils.Response
+// @Failure 500 {object} utils.Response
+// @Security BearerAuth
 // @Router /categories/{id} [get]
 func (h *CategoryHandler) GetById(c *gin.Context) {
 	id := c.Param("id")
@@ -82,8 +84,9 @@ func (h *CategoryHandler) GetById(c *gin.Context) {
 // @Produce json
 // @Param id path string true "Category ID"
 // @Param category body dtos.UpdateCategoryRequest true "Category details"
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 400 {object} utils.ErrorResponse
+// @Success 200 {object} utils.Response
+// @Failure 400 {object} utils.Response
+// @Security BearerAuth
 // @Router /categories/{id} [patch]
 func (h *CategoryHandler) Update(c *gin.Context) {
 	id := c.Param("id")
@@ -112,8 +115,9 @@ func (h *CategoryHandler) Update(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path string true "Category ID"
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 400 {object} utils.ErrorResponse
+// @Success 200 {object} utils.Response
+// @Failure 400 {object} utils.Response
+// @Security BearerAuth
 // @Router /categories/{id} [delete]
 func (h *CategoryHandler) Delete(c *gin.Context) {
 	id := c.Param("id")

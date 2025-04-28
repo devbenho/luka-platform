@@ -1,0 +1,1008 @@
+basePath: /api/v1
+definitions:
+  dtos.AuthDTO:
+    properties:
+      login:
+        description: Can be either username or email
+        type: string
+      password:
+        minLength: 6
+        type: string
+    required:
+    - login
+    - password
+    type: object
+  dtos.CreateCategoryRequest:
+    properties:
+      description:
+        maxLength: 200
+        type: string
+      name:
+        maxLength: 50
+        minLength: 3
+        type: string
+      parent_id:
+        type: string
+      slug:
+        type: string
+    required:
+    - name
+    - slug
+    type: object
+  dtos.CreateInventoryRequest:
+    properties:
+      max_quantity:
+        type: integer
+      min_quantity:
+        minimum: 0
+        type: integer
+      product_id:
+        type: string
+      quantity:
+        minimum: 0
+        type: integer
+      store_id:
+        type: string
+      warehouse_id:
+        type: string
+    required:
+    - max_quantity
+    - min_quantity
+    - product_id
+    - quantity
+    - store_id
+    - warehouse_id
+    type: object
+  dtos.CreateOrderItemRequest:
+    properties:
+      productID:
+        type: string
+      quantity:
+        type: integer
+    required:
+    - productID
+    - quantity
+    type: object
+  dtos.CreateOrderRequest:
+    properties:
+      customerID:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/dtos.CreateOrderItemRequest'
+        minItems: 1
+        type: array
+      notes:
+        type: string
+      shippingAddress:
+        type: string
+    required:
+    - customerID
+    - items
+    - shippingAddress
+    type: object
+  dtos.CreateProductRequest:
+    properties:
+      categories:
+        items:
+          type: string
+        type: array
+      description:
+        type: string
+      images:
+        items:
+          type: string
+        type: array
+      name:
+        type: string
+      price:
+        type: number
+      store_id:
+        type: string
+    required:
+    - categories
+    - description
+    - images
+    - name
+    - price
+    - store_id
+    type: object
+  dtos.CreateStoreRequest:
+    type: object
+  dtos.CreateUserRequest:
+    properties:
+      email:
+        type: string
+      password:
+        minLength: 6
+        type: string
+      role:
+        enum:
+        - buyer
+        - seller
+        - supplier
+        type: string
+      username:
+        maxLength: 20
+        minLength: 3
+        type: string
+    required:
+    - email
+    - password
+    - role
+    - username
+    type: object
+  dtos.UpdateCategoryRequest:
+    properties:
+      description:
+        maxLength: 200
+        type: string
+      name:
+        maxLength: 50
+        minLength: 3
+        type: string
+      parent_id:
+        type: string
+      slug:
+        type: string
+    type: object
+  dtos.UpdateInventoryRequest:
+    properties:
+      product_id:
+        type: string
+      quantity:
+        minimum: 0
+        type: integer
+      status:
+        enum:
+        - in_stock
+        - out_of_stock
+        - low_stock
+        type: string
+    type: object
+  dtos.UpdateProductRequest:
+    properties:
+      categories:
+        items:
+          type: string
+        type: array
+      description:
+        type: string
+      images:
+        items:
+          type: string
+        type: array
+      name:
+        type: string
+      price:
+        type: number
+      store_id:
+        type: string
+    type: object
+  dtos.UpdateStoreRequest:
+    properties:
+      name:
+        type: string
+    required:
+    - name
+    type: object
+  dtos.UpdateUserRequest:
+    properties:
+      email:
+        type: string
+      role:
+        enum:
+        - buyer
+        - seller
+        - supplier
+        type: string
+      username:
+        maxLength: 20
+        minLength: 3
+        type: string
+    type: object
+  utils.Response:
+    properties:
+      data: {}
+      error:
+        type: string
+      message:
+        type: string
+      status:
+        type: integer
+      success:
+        type: boolean
+    type: object
+host: localhost:2707
+info:
+  contact:
+    email: support@luka-platform.com
+    name: API Support
+    url: http://www.swagger.io/support
+  description: This is the API documentation for the Luka Platform e-commerce application
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Luka Platform API
+  version: "1.0"
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Login a user with the provided credentials
+      parameters:
+      - description: User credentials
+        in: body
+        name: credentials
+        required: true
+        schema:
+          $ref: '#/definitions/dtos.AuthDTO'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Login a user
+      tags:
+      - users
+  /categories:
+    post:
+      consumes:
+      - application/json
+      description: Create a new category with the provided details
+      parameters:
+      - description: Category details
+        in: body
+        name: category
+        required: true
+        schema:
+          $ref: '#/definitions/dtos.CreateCategoryRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Create a new category
+      tags:
+      - categories
+  /categories/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a category with the provided ID
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete a category
+      tags:
+      - categories
+    get:
+      consumes:
+      - application/json
+      description: Fetch a category by ID
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Get a category by ID
+      tags:
+      - categories
+    patch:
+      consumes:
+      - application/json
+      description: Update a category with the provided details
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Category details
+        in: body
+        name: category
+        required: true
+        schema:
+          $ref: '#/definitions/dtos.UpdateCategoryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Update a category
+      tags:
+      - categories
+  /inventories:
+    post:
+      consumes:
+      - application/json
+      description: Create a new inventory with the provided details
+      parameters:
+      - description: Inventory details
+        in: body
+        name: inventory
+        required: true
+        schema:
+          $ref: '#/definitions/dtos.CreateInventoryRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Create a new inventory
+      tags:
+      - inventories
+  /inventories/{id}:
+    delete:
+      description: Delete an inventory from the system
+      parameters:
+      - description: Inventory ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete an inventory
+      tags:
+      - inventories
+    get:
+      description: Get detailed information about a specific inventory
+      parameters:
+      - description: Inventory ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Get inventory by ID
+      tags:
+      - inventories
+    patch:
+      consumes:
+      - application/json
+      description: Update an existing inventory
+      parameters:
+      - description: Inventory ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Inventory update data
+        in: body
+        name: inventory
+        required: true
+        schema:
+          $ref: '#/definitions/dtos.UpdateInventoryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Update an inventory
+      tags:
+      - inventories
+  /orders:
+    get:
+      description: Get a list of orders, optionally filtered by customer ID
+      parameters:
+      - description: Filter orders by customer ID
+        in: query
+        name: customer_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: List orders
+      tags:
+      - orders
+    post:
+      consumes:
+      - application/json
+      description: Create a new order with the provided details
+      parameters:
+      - description: Order details
+        in: body
+        name: order
+        required: true
+        schema:
+          $ref: '#/definitions/dtos.CreateOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Create a new order
+      tags:
+      - orders
+  /orders/{id}:
+    get:
+      description: Get detailed information about a specific order
+      parameters:
+      - description: Order ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Get order by ID
+      tags:
+      - orders
+  /orders/{id}/status:
+    patch:
+      consumes:
+      - application/json
+      description: Update the status of an existing order
+      parameters:
+      - description: Order ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: New order status
+        in: body
+        name: status
+        required: true
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Update order status
+      tags:
+      - orders
+  /products:
+    post:
+      consumes:
+      - application/json
+      description: Create a new product in the system
+      parameters:
+      - description: Product Data
+        in: body
+        name: product
+        required: true
+        schema:
+          $ref: '#/definitions/dtos.CreateProductRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Create a new product
+      tags:
+      - products
+  /products/{id}:
+    delete:
+      description: Delete a product from the system
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete a product
+      tags:
+      - products
+    get:
+      description: Get detailed information about a specific product
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Get a product by ID
+      tags:
+      - products
+    patch:
+      consumes:
+      - application/json
+      description: Update an existing product
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Product Update Data
+        in: body
+        name: product
+        required: true
+        schema:
+          $ref: '#/definitions/dtos.UpdateProductRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Update a product
+      tags:
+      - products
+  /stores:
+    post:
+      consumes:
+      - application/json
+      description: Create a new store with the provided details
+      parameters:
+      - description: Store details
+        in: body
+        name: store
+        required: true
+        schema:
+          $ref: '#/definitions/dtos.CreateStoreRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Create a new store
+      tags:
+      - stores
+  /stores/{id}:
+    delete:
+      description: Delete a store with the provided ID
+      parameters:
+      - description: Store ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete a store
+      tags:
+      - stores
+    get:
+      description: Fetch a store by ID
+      parameters:
+      - description: Store ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Get a store by ID
+      tags:
+      - stores
+    put:
+      consumes:
+      - application/json
+      description: Update a store with the provided details
+      parameters:
+      - description: Store ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Store details
+        in: body
+        name: store
+        required: true
+        schema:
+          $ref: '#/definitions/dtos.UpdateStoreRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Update a store
+      tags:
+      - stores
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Register a new user with the provided details
+      parameters:
+      - description: User details
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/dtos.CreateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Register a new user
+      tags:
+      - auth
+  /users/{id}:
+    delete:
+      description: Delete user by ID
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete user
+      tags:
+      - users
+    get:
+      description: Get user details by ID
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Get user by ID
+      tags:
+      - users
+    put:
+      consumes:
+      - application/json
+      description: Update user details by ID
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Updated user details
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/dtos.UpdateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Update user details
+      tags:
+      - users
+schemes:
+- http
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
