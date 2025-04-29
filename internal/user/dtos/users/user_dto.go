@@ -44,15 +44,23 @@ type GetUserResponse struct {
 }
 
 type UpdateUserRequest struct {
-	Username *string `json:"username" validate:"min=3,max=20"`
-	Email    *string `json:"email" validate:"email"`
-	Role     *string `json:"role" validate:"oneof=buyer seller supplier"`
+	Username *string `json:"username,omitempty" validate:"omitempty,min=3,max=20"`
+	Email    *string `json:"email,omitempty" validate:"omitempty,email"`
+	Role     *string `json:"role,omitempty" validate:"omitempty,oneof=buyer seller supplier"`
 }
 
 func (u *UpdateUserRequest) ToUser() *models.User {
-	return &models.User{
-		Username: *u.Username,
-		Email:    *u.Email,
-		Role:     *u.Role,
+	user := &models.User{}
+
+	if u.Username != nil {
+		user.Username = *u.Username
 	}
+	if u.Email != nil {
+		user.Email = *u.Email
+	}
+	if u.Role != nil {
+		user.Role = *u.Role
+	}
+
+	return user
 }

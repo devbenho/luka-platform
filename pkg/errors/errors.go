@@ -7,13 +7,15 @@ import (
 type ErrorType string
 
 const (
-	ValidationErrorType ErrorType = "VALIDATION_ERROR"
-	NotFoundErrorType   ErrorType = "NOT_FOUND"
-	UnauthorizedType    ErrorType = "UNAUTHORIZED"
-	InternalServerType  ErrorType = "INTERNAL_SERVER_ERROR"
-	ConflictType        ErrorType = "CONFLICT"
-	BadRequestType      ErrorType = "BAD_REQUEST"
-	InvalidCredentials  ErrorType = "INVALID_CREDENTIALS"
+	ValidationErrorType  ErrorType = "VALIDATION_ERROR"
+	NotFoundErrorType    ErrorType = "NOT_FOUND"
+	UnauthorizedType     ErrorType = "UNAUTHORIZED"
+	InternalServerType   ErrorType = "INTERNAL_SERVER_ERROR"
+	ConflictType         ErrorType = "CONFLICT"
+	BadRequestType       ErrorType = "BAD_REQUEST"
+	InvalidCredentials   ErrorType = "INVALID_CREDENTIALS"
+	UserAlreadyExists    ErrorType = "USER_ALREADY_EXISTS"
+	AdminCannotBeDeleted ErrorType = "ADMIN_CANNOT_BE_DELETED"
 )
 
 // AppError is the base error type for the application

@@ -25,8 +25,8 @@ type IUserRepository interface {
 }
 
 type userRepository struct {
-	db     database.IDatabase
-	mu     sync.RWMutex
+	db database.IDatabase
+	mu sync.RWMutex
 }
 
 func NewUserRepository(db database.IDatabase) IUserRepository {
@@ -133,6 +133,9 @@ func (r *userRepository) GetUserByEmail(ctx context.Context, email string) (*mod
 	filter := bson.M{"email": email}
 	err := r.db.FindOne(ctx, "users", filter, user)
 	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return user, nil

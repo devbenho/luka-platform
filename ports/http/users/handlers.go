@@ -103,7 +103,7 @@ func (h *UserHandler) GetUserByID(c *gin.Context) {
 		c.JSON(http.StatusNotFound, utils.NewErrorResponse(http.StatusNotFound, "User not found", err.Error()))
 		return
 	}
-
+	log.Printf("user: %+v", user)
 	c.JSON(http.StatusOK, user)
 }
 
@@ -155,5 +155,5 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 		return
 	}
 
-	c.Status(http.StatusNoContent)
+	c.Status(http.StatusOK)
 }

@@ -21,6 +21,8 @@ type IUserService interface {
 	UpdateUser(ctx context.Context, id string, user *dtos.UpdateUserRequest) (*dtos.UserResponseDTO, error)
 	DeleteUser(ctx context.Context, id string) error
 	FindUser(ctx context.Context, login string) (*models.User, error)
+	FindUserByEmail(ctx context.Context, email string) (*models.User, error)
+	FindUserByUsername(ctx context.Context, username string) (*models.User, error)
 }
 
 type UserService struct {
@@ -52,8 +54,21 @@ func (s *UserService) Register(ctx context.Context, dto *dtos.CreateUserRequest)
 		return nil, err
 	}
 
-	dto.Password, _ = s.hasher.Hash(dto.Password)
-	user := dto.ToUser()
+	// validate if user already exists
+
+	user, err := s.FindUserByEmailOrUsername(ctx, dto.Email, dto.Username)
+	if err != nil {
+		return nil, err
+	}
+	if user != nil {
+		return nil, errors.NewError(errors.UserAlreadyExists, http.StatusBadRequest, "user already exists")
+	}
+
+	// hash password
+	dto.Password, err = s.hasher.Hash(dto.Password)
+	if err != nil {
+		return nil, err
+	}
 
 	if err := s.repo.CreateUser(ctx, user); err != nil {
 		return nil, err
@@ -144,6 +159,18 @@ func (s *UserService) UpdateUser(ctx context.Context, id string, user *dtos.Upda
 }
 
 func (s *UserService) DeleteUser(ctx context.Context, id string) error {
+	user, err := s.repo.GetUserByID(ctx, id)
+	if err != nil {
+		return errors.Wrap(err, "fetching user")
+	}
+	if user == nil {
+		return errors.NewNotFoundError("user", id)
+	}
+
+	if user.Role == "admin" {
+		return errors.NewError(errors.AdminCannotBeDeleted, http.StatusBadRequest, "admin cannot be deleted")
+	}
+
 	return s.repo.DeleteUser(ctx, id)
 }
 
@@ -164,4 +191,23 @@ func (s *UserService) FindUser(ctx context.Context, login string) (*models.User,
 	}
 
 	return user, nil
+}
+
+func (s *UserService) FindUserByEmail(ctx context.Context, email string) (*models.User, error) {
+	return s.repo.GetUserByEmail(ctx, email)
+}
+
+func (s *UserService) FindUserByUsername(ctx context.Context, username string) (*models.User, error) {
+	return s.repo.GetUserByUsername(ctx, username)
+}
+
+func (s *UserService) FindUserByEmailOrUsername(ctx context.Context, email, username string) (*models.User, error) {
+	user, err := s.FindUserByEmail(ctx, email)
+	if err != nil {
+		return nil, err
+	}
+	if user != nil {
+		return user, nil
+	}
+	return s.FindUserByUsername(ctx, username)
 }
