@@ -2,8 +2,8 @@ package services
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
-	"log"
 	"time"
 
 	inventoryDTOs "github.com/devbenho/luka-platform/internal/inventory/dtos"
@@ -67,11 +67,17 @@ func (s *OrderService) CreateOrder(ctx context.Context, dto dtos.CreateOrderRequ
 
 	createdOrder, err := s.repo.CreateOrder(ctx, order)
 	if err != nil {
-		s.rollbackInventory(ctx, orderItems)
+		message := fmt.Sprintf("creating order: %v", err)
+		cause := err
+		if rollbackErr := s.rollbackInventory(ctx, orderItems); rollbackErr != nil {
+			message += "; inventory rollback failed"
+			cause = stderrors.Join(err, rollbackErr)
+		}
 		return nil, errors.NewError(
 			errors.InternalServerType,
 			500,
-			fmt.Sprintf("creating order: %v", err),
+			message,
+			errors.WithCause(cause),
 			errors.WithMetadata(map[string]interface{}{
 				"customer_id": dto.CustomerID,
 				"items_count": len(dto.Items),
@@ -98,7 +104,10 @@ func (s *OrderService) prepareOrderItems(ctx context.Context, items []dtos.Creat
 		}
 
 		if inventory.Quantity < item.Quantity {
-			return nil, 0, errors.Wrapf(err, "product_id: %s", item.ProductID.Hex())
+			return nil, 0, errors.NewConflictError(fmt.Sprintf(
+				"insufficient stock for product %s: requested %d, available %d",
+				item.ProductID.Hex(), item.Quantity, inventory.Quantity,
+			))
 		}
 
 		itemTotal := float64(item.Quantity) * product.Price
@@ -139,15 +148,21 @@ func (s *OrderService) reserveInventory(ctx context.Context, items []models.Orde
 	return nil
 }
 
-func (s *OrderService) rollbackInventory(ctx context.Context, items []models.OrderItem) {
+// rollbackInventory restores the quantities reserved by reserveInventory.
+// It attempts every item and returns all failures joined, so a partial
+// rollback is never silently lost.
+func (s *OrderService) rollbackInventory(ctx context.Context, items []models.OrderItem) error {
+	var errs []error
 	for _, item := range items {
 		updateReq := inventoryDTOs.UpdateInventoryRequest{
 			Quantity: utils.IntPtr(item.Quantity),
 		}
-		if _, err := s.inventoryService.UpdateInventory(ctx, item.ProductID.String(), updateReq); err != nil {
-			log.Printf("failed to rollback inventory: %v", err)
+		productID := item.ProductID.Hex()
+		if _, err := s.inventoryService.UpdateInventory(ctx, productID, updateReq); err != nil {
+			errs = append(errs, fmt.Errorf("rolling back inventory for product %s (quantity %d): %w", productID, item.Quantity, err))
 		}
 	}
+	return stderrors.Join(errs...)
 }
 
 func (s *OrderService) UpdateOrderStatus(ctx context.Context, id string, status models.OrderStatus) error {
