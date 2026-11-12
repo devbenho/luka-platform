@@ -2,13 +2,11 @@ package services
 
 import (
 	"context"
-	"time"
 
 	"github.com/devbenho/luka-platform/internal/product/dtos"
 	"github.com/devbenho/luka-platform/internal/product/models"
 	"github.com/devbenho/luka-platform/internal/product/repositories"
 	storeRepo "github.com/devbenho/luka-platform/internal/store/repositories"
-	"github.com/devbenho/luka-platform/internal/utils"
 	"github.com/devbenho/luka-platform/pkg/errors"
 	"github.com/devbenho/luka-platform/pkg/validation"
 )
@@ -36,11 +34,14 @@ func NewProductService(repository repositories.IProductRepository, storeRepo sto
 
 func (s *ProductService) CreateProduct(ctx context.Context, product *dtos.CreateProductRequest) (*dtos.CreateProductResponse, error) {
 	if err := s.validator.ValidateStruct(product); err != nil {
-		return nil, errors.Wrap(err, "validating product")
+		return nil, err
 	}
 
-	_, err := s.storeRepo.GetStoreByID(ctx, product.StoreID.Hex())
+	store, err := s.storeRepo.GetStoreByID(ctx, product.StoreID.Hex())
 	if err != nil {
+		return nil, errors.Wrap(err, "fetching store")
+	}
+	if store == nil || store.DeletedAt != nil {
 		return nil, errors.NewNotFoundError("store", product.StoreID.Hex())
 	}
 
@@ -54,58 +55,43 @@ func (s *ProductService) CreateProduct(ctx context.Context, product *dtos.Create
 	}, nil
 }
 
+// GetProductByID returns the product, or a not-found error when it does not
+// exist or has been soft-deleted.
 func (s *ProductService) GetProductByID(ctx context.Context, id string) (*models.Product, error) {
 	product, err := s.repo.GetProductByID(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "fetching product")
 	}
-	if product.DeletedAt != nil {
-		return nil, errors.NewNotFoundError(
-			"product",
-			id,
-		)
+	if product == nil || product.DeletedAt != nil {
+		return nil, errors.NewNotFoundError("product", id)
 	}
 	return product, nil
 }
 
-func (s *ProductService) UpdateProduct(ctx context.Context, id string, product *dtos.UpdateProductRequest) (*models.Product, error) {
-	if err := s.validator.ValidateStruct(product); err != nil {
-		if validationErrors, ok := err.(errors.ValidationErrors); ok {
-			return nil, validationErrors
-		}
+func (s *ProductService) UpdateProduct(ctx context.Context, id string, update *dtos.UpdateProductRequest) (*models.Product, error) {
+	if err := s.validator.ValidateStruct(update); err != nil {
 		return nil, err
 	}
 
-	existingProduct, err := s.repo.GetProductByID(ctx, id)
+	product, err := s.GetProductByID(ctx, id)
 	if err != nil {
-		return nil, errors.Wrap(err, "finding product")
-	}
-	if existingProduct.DeletedAt != nil {
-		return nil, errors.NewNotFoundError("product", id)
+		return nil, err
 	}
 
-	utils.Copy(existingProduct, product)
-	if err := s.repo.UpdateProduct(ctx, id, existingProduct); err != nil {
+	update.ApplyTo(product)
+	if err := s.repo.UpdateProduct(ctx, id, product); err != nil {
 		return nil, errors.Wrap(err, "updating product")
 	}
 
-	return existingProduct, nil
+	return product, nil
 }
 
 func (s *ProductService) DeleteProduct(ctx context.Context, id string) error {
-	product, err := s.repo.GetProductByID(ctx, id)
-	if err != nil {
-		return errors.Wrap(err, "finding product")
+	if _, err := s.GetProductByID(ctx, id); err != nil {
+		return err
 	}
-	if product.DeletedAt != nil {
-		return errors.NewNotFoundError("product", id)
-	}
-
-	now := time.Now()
-	product.DeletedAt = &now
-	if err := s.repo.UpdateProduct(ctx, id, product); err != nil {
+	if err := s.repo.DeleteProduct(ctx, id); err != nil {
 		return errors.Wrap(err, "soft deleting product")
 	}
-
 	return nil
 }

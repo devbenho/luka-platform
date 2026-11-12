@@ -43,8 +43,7 @@ func (h *CategoryHandler) Create(c *gin.Context) {
 	createCategoryRequest.Slug = slug.GenerateSlug(createCategoryRequest.Name)
 	result, err := h.service.CreateCategory(c.Request.Context(), &createCategoryRequest)
 	if err != nil {
-		apiError := errors.MapErrorToHTTP(err)
-		c.JSON(apiError.Status, apiError)
+		errors.Respond(c, err)
 		return
 	}
 
@@ -67,8 +66,7 @@ func (h *CategoryHandler) GetById(c *gin.Context) {
 	id := c.Param("id")
 	category, err := h.service.GetCategoryByID(c.Request.Context(), id)
 	if err != nil {
-		apiError := errors.MapErrorToHTTP(err)
-		c.JSON(apiError.Status, apiError)
+		errors.Respond(c, err)
 		return
 	}
 	category.Slug = slug.GenerateSlug(category.Name)
@@ -99,8 +97,7 @@ func (h *CategoryHandler) Update(c *gin.Context) {
 	updateCategoryRequest.Slug = &slugValue
 	category, err := h.service.UpdateCategory(c.Request.Context(), id, &updateCategoryRequest)
 	if err != nil {
-		apiError := errors.MapErrorToHTTP(err)
-		c.JSON(apiError.Status, apiError)
+		errors.Respond(c, err)
 		return
 	}
 
@@ -123,8 +120,7 @@ func (h *CategoryHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	err := h.service.DeleteCategory(c.Request.Context(), id)
 	if err != nil {
-		apiError := errors.MapErrorToHTTP(err)
-		c.JSON(apiError.Status, apiError)
+		errors.Respond(c, err)
 		return
 	}
 

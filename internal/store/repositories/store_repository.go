@@ -3,17 +3,29 @@ package repositories
 import (
 	"context"
 	"errors"
-	"log"
 	"time"
 
 	"github.com/devbenho/luka-platform/internal/store/models"
 	"github.com/devbenho/luka-platform/pkg/database"
+	apperrors "github.com/devbenho/luka-platform/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+)
+
+// Store has no bson tags, so the driver stores each field under its
+// lowercased Go name (OwnerId -> "ownerid", DeletedAt -> "deletedat").
+// Queries must use those names to match existing documents.
+const (
+	fieldName      = "name"
+	fieldSlug      = "slug"
+	fieldUpdatedAt = "updatedat"
+	fieldDeletedAt = "deletedat"
 )
 
 type IStoreRepository interface {
 	CreateStore(ctx context.Context, store *models.Store) (*models.Store, error)
+	// GetStoreByID returns (nil, nil) when no store has the given ID.
 	GetStoreByID(ctx context.Context, id string) (*models.Store, error)
 	UpdateStore(ctx context.Context, id string, store *models.Store) error
 	DeleteStore(ctx context.Context, id string) error
@@ -27,6 +39,14 @@ func NewStoreRepository(db database.IDatabase) IStoreRepository {
 	return &StoreRepository{
 		db: db,
 	}
+}
+
+func parseStoreID(id string) (primitive.ObjectID, error) {
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return primitive.NilObjectID, apperrors.NewBadRequestError("invalid store ID")
+	}
+	return objID, nil
 }
 
 func (r *StoreRepository) CreateStore(ctx context.Context, store *models.Store) (*models.Store, error) {
@@ -46,13 +66,16 @@ func (r *StoreRepository) CreateStore(ctx context.Context, store *models.Store) 
 }
 
 func (r *StoreRepository) GetStoreByID(ctx context.Context, id string) (*models.Store, error) {
-	objID, err := primitive.ObjectIDFromHex(id)
+	objID, err := parseStoreID(id)
 	if err != nil {
-		return nil, errors.New("invalid store ID")
+		return nil, err
 	}
 	var store models.Store
 	filter := bson.M{"_id": objID}
 	if err := r.db.FindOne(ctx, "stores", filter, &store); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, nil
+		}
 		return nil, err
 	}
 
@@ -60,35 +83,27 @@ func (r *StoreRepository) GetStoreByID(ctx context.Context, id string) (*models.
 }
 
 func (r *StoreRepository) UpdateStore(ctx context.Context, id string, store *models.Store) error {
-	objID, err := primitive.ObjectIDFromHex(id)
+	objID, err := parseStoreID(id)
 	if err != nil {
-		return errors.New("invalid store ID")
+		return err
 	}
 	store.UpdatedAt = time.Now()
-	filter := bson.M{"_id": objID}
+	filter := bson.M{"_id": objID, fieldDeletedAt: nil}
 	update := bson.M{
 		"$set": bson.M{
-			"name":       store.Name,
-			"owner":      store.OwnerId,
-			"slug":       store.Slug,
-			"updated_at": store.UpdatedAt,
+			fieldName:      store.Name,
+			fieldSlug:      store.Slug,
+			fieldUpdatedAt: store.UpdatedAt,
 		},
 	}
-
-	r.db.Update(ctx, "stores", filter, update)
-	return nil
+	return r.db.Update(ctx, "stores", filter, update)
 }
 
 func (r *StoreRepository) DeleteStore(ctx context.Context, id string) error {
-	log.Println(`The store ID is `, id)
-	objID, err := primitive.ObjectIDFromHex(id)
+	objID, err := parseStoreID(id)
 	if err != nil {
-		return errors.New("invalid store ID")
+		return err
 	}
-	filter := bson.M{"_id": objID}
-	// get the store
-	store, _ := r.GetStoreByID(ctx, id)
-	log.Println(`The store entity is this `, store)
-	r.db.SoftDelete(ctx, "stores", filter)
-	return nil
+	filter := bson.M{"_id": objID, fieldDeletedAt: nil}
+	return r.db.SoftDelete(ctx, "stores", fieldDeletedAt, filter)
 }

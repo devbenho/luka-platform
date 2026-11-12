@@ -6,6 +6,7 @@ import (
 	"github.com/devbenho/luka-platform/internal/product/dtos"
 	"github.com/devbenho/luka-platform/internal/product/services"
 	"github.com/devbenho/luka-platform/internal/utils"
+	errors "github.com/devbenho/luka-platform/ports/http/errors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -39,7 +40,7 @@ func (h *ProductHandler) Create(c *gin.Context) {
 
 	product, err := h.service.CreateProduct(c.Request.Context(), &req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, utils.NewErrorResponse(http.StatusInternalServerError, "Failed to create product", err.Error()))
+		errors.Respond(c, err)
 		return
 	}
 
@@ -69,7 +70,7 @@ func (h *ProductHandler) Update(c *gin.Context) {
 
 	product, err := h.service.UpdateProduct(c.Request.Context(), id, &req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, utils.NewErrorResponse(http.StatusInternalServerError, "Failed to update product", err.Error()))
+		errors.Respond(c, err)
 		return
 	}
 
@@ -90,7 +91,7 @@ func (h *ProductHandler) GetById(c *gin.Context) {
 	id := c.Param("id")
 	product, err := h.service.GetProductByID(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, utils.NewErrorResponse(http.StatusInternalServerError, "Failed to get product", err.Error()))
+		errors.Respond(c, err)
 		return
 	}
 
@@ -111,7 +112,7 @@ func (h *ProductHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	err := h.service.DeleteProduct(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, utils.NewErrorResponse(http.StatusInternalServerError, "Failed to delete product", err.Error()))
+		errors.Respond(c, err)
 		return
 	}
 

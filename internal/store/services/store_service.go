@@ -13,8 +13,8 @@ import (
 type IStoreService interface {
 	CreateStore(ctx context.Context, store *dtos.CreateStoreRequest) (*dtos.CreateStoreResponse, error)
 	GetStoreByID(ctx context.Context, id string) (*models.Store, error)
-	UpdateStore(ctx context.Context, id string, store *dtos.UpdateStoreRequest) (*models.Store, error)
-	DeleteStore(ctx context.Context, id string) error
+	UpdateStore(ctx context.Context, id, userID string, store *dtos.UpdateStoreRequest) (*models.Store, error)
+	DeleteStore(ctx context.Context, id, userID string) error
 }
 
 type StoreService struct {
@@ -31,14 +31,10 @@ func NewStoreService(repository repositories.IStoreRepository, validator *valida
 
 func (s *StoreService) CreateStore(ctx context.Context, store *dtos.CreateStoreRequest) (*dtos.CreateStoreResponse, error) {
 	if err := s.validator.ValidateStruct(store); err != nil {
-		if validationErrors, ok := err.(errors.ValidationErrors); ok {
-			return nil, validationErrors
-		}
 		return nil, err
 	}
 
-	storeEntity := store.ToStore()
-	storeResult, err := s.repo.CreateStore(ctx, storeEntity)
+	storeResult, err := s.repo.CreateStore(ctx, store.ToStore())
 	if err != nil {
 		return nil, errors.Wrap(err, "creating store in database")
 	}
@@ -50,55 +46,53 @@ func (s *StoreService) CreateStore(ctx context.Context, store *dtos.CreateStoreR
 	}, nil
 }
 
+// GetStoreByID returns the store, or a not-found error when it does not exist
+// or has been soft-deleted.
 func (s *StoreService) GetStoreByID(ctx context.Context, id string) (*models.Store, error) {
 	store, err := s.repo.GetStoreByID(ctx, id)
 	if err != nil {
 		return nil, errors.Wrap(err, "fetching store")
 	}
-	if store.DeletedAt != nil {
+	if store == nil || store.DeletedAt != nil {
 		return nil, errors.NewNotFoundError("store", id)
 	}
 	return store, nil
 }
 
-func (s *StoreService) UpdateStore(ctx context.Context, id string, store *dtos.UpdateStoreRequest) (*models.Store, error) {
-	if err := s.validator.ValidateStruct(store); err != nil {
-		return nil, errors.Wrap(err, "validating store update")
-	}
-
-	existingStore, err := s.repo.GetStoreByID(ctx, id)
+// getOwnedStore returns the store if userID owns it.
+func (s *StoreService) getOwnedStore(ctx context.Context, id, userID string) (*models.Store, error) {
+	store, err := s.GetStoreByID(ctx, id)
 	if err != nil {
-		return nil, errors.Wrap(err, "fetching existing store")
+		return nil, err
 	}
-	if existingStore.DeletedAt != nil {
-		return nil, errors.NewNotFoundError("store", id)
+	if store.OwnerId.Hex() != userID {
+		return nil, errors.NewForbiddenError("you can only modify your own store")
+	}
+	return store, nil
+}
+
+func (s *StoreService) UpdateStore(ctx context.Context, id, userID string, update *dtos.UpdateStoreRequest) (*models.Store, error) {
+	if err := s.validator.ValidateStruct(update); err != nil {
+		return nil, err
 	}
 
-	userID, ok := ctx.Value("user_id").(string)
-	if !ok || userID != existingStore.OwnerId.String() {
-		return nil, errors.NewUnauthorizedError("not authorized to update this store")
+	store, err := s.getOwnedStore(ctx, id, userID)
+	if err != nil {
+		return nil, err
 	}
 
-	updatedStore := store.ToStore()
-	updatedStore.ID = existingStore.ID
-	updatedStore.OwnerId = existingStore.OwnerId
-
-	if err = s.repo.UpdateStore(ctx, id, updatedStore); err != nil {
+	update.ApplyTo(store)
+	if err = s.repo.UpdateStore(ctx, id, store); err != nil {
 		return nil, errors.Wrap(err, "updating store in database")
 	}
 
-	return updatedStore, nil
+	return store, nil
 }
 
-func (s *StoreService) DeleteStore(ctx context.Context, id string) error {
-	store, err := s.repo.GetStoreByID(ctx, id)
-	if err != nil {
-		return errors.Wrap(err, "fetching store")
+func (s *StoreService) DeleteStore(ctx context.Context, id, userID string) error {
+	if _, err := s.getOwnedStore(ctx, id, userID); err != nil {
+		return err
 	}
-	if store.DeletedAt != nil {
-		return errors.NewNotFoundError("store", id)
-	}
-
 	if err := s.repo.DeleteStore(ctx, id); err != nil {
 		return errors.Wrap(err, "deleting store")
 	}

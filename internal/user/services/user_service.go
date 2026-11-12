@@ -54,24 +54,23 @@ func (s *UserService) Register(ctx context.Context, dto *dtos.CreateUserRequest)
 		return nil, err
 	}
 
-	// validate if user already exists
-
-	user, err := s.FindUserByEmailOrUsername(ctx, dto.Email, dto.Username)
+	existing, err := s.FindUserByEmailOrUsername(ctx, dto.Email, dto.Username)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "checking for existing user")
 	}
-	if user != nil {
+	if existing != nil {
 		return nil, errors.NewError(errors.UserAlreadyExists, http.StatusBadRequest, "user already exists")
 	}
 
-	// hash password
-	dto.Password, err = s.hasher.Hash(dto.Password)
+	hashedPassword, err := s.hasher.Hash(dto.Password)
 	if err != nil {
-		return nil, err
+		return nil, errors.NewInternalError("hashing password", err)
 	}
 
+	user := dto.ToUser()
+	user.Password = hashedPassword
 	if err := s.repo.CreateUser(ctx, user); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "creating user")
 	}
 
 	payload := map[string]interface{}{
@@ -93,22 +92,25 @@ func (s *UserService) Register(ctx context.Context, dto *dtos.CreateUserRequest)
 }
 
 func (s *UserService) Login(ctx context.Context, dto *dtos.AuthDTO) (*dtos.AuthResponseDTO, error) {
+	if err := s.validator.ValidateStruct(dto); err != nil {
+		return nil, err
+	}
+
 	existUser, err := s.FindUser(ctx, dto.Login)
 	if err != nil {
 		return nil, errors.Wrap(err, "finding user")
 	}
-	if existUser == nil {
-		return nil, errors.NewNotFoundError("user", dto.Login)
-	}
-
-	if err := s.hasher.Compare(existUser.Password, dto.Password); err != nil {
+	// Same response for an unknown user and a wrong password, so the login
+	// endpoint cannot be used to discover which accounts exist.
+	if existUser == nil || s.hasher.Compare(existUser.Password, dto.Password) != nil {
 		return nil, errors.NewError(errors.InvalidCredentials, http.StatusUnauthorized, "invalid credentials")
 	}
 
 	payload := map[string]interface{}{
-		"Id":    existUser.ID.Hex(),
-		"Email": existUser.Email,
-		"Role":  existUser.Role,
+		"Id":       existUser.ID.Hex(),
+		"Email":    existUser.Email,
+		"Role":     existUser.Role,
+		"Username": existUser.Username,
 	}
 
 	token, err := tokens.GenerateAccessToken(payload)
@@ -148,7 +150,10 @@ func (s *UserService) UpdateUser(ctx context.Context, id string, user *dtos.Upda
 	}
 
 	if err := s.validator.ValidateStruct(user); err != nil {
-		return nil, errors.Wrap(err, "validating update request")
+		return nil, err
+	}
+	if err := s.ensureUnique(ctx, existingUser, user); err != nil {
+		return nil, err
 	}
 
 	utils.Copy(existingUser, user)
@@ -180,23 +185,16 @@ func (s *UserService) DeleteUser(ctx context.Context, id string) error {
 	return s.repo.DeleteUser(ctx, id)
 }
 
+// FindUser looks a user up by email (when login is an email address) or by
+// username. It returns (nil, nil) when no user matches.
 func (s *UserService) FindUser(ctx context.Context, login string) (*models.User, error) {
-	isEmail := utils.IsEmailValid(login)
-	var user *models.User
-	var err error
-	if isEmail {
-		user, err = s.repo.GetUserByEmail(ctx, login)
-		if err == nil {
-			return user, nil
+	if utils.IsEmailValid(login) {
+		user, err := s.repo.GetUserByEmail(ctx, login)
+		if err != nil || user != nil {
+			return user, err
 		}
 	}
-	user, err = s.repo.GetUserByUsername(ctx, login)
-
-	if err != nil {
-		return nil, errors.NewNotFoundError("user", login)
-	}
-
-	return user, nil
+	return s.repo.GetUserByUsername(ctx, login)
 }
 
 func (s *UserService) FindUserByEmail(ctx context.Context, email string) (*models.User, error) {
@@ -216,4 +214,28 @@ func (s *UserService) FindUserByEmailOrUsername(ctx context.Context, email, user
 		return user, nil
 	}
 	return s.FindUserByUsername(ctx, username)
+}
+
+// ensureUnique rejects an update that would give the user a username or email
+// already used by another account.
+func (s *UserService) ensureUnique(ctx context.Context, current *models.User, update *dtos.UpdateUserRequest) error {
+	if update.Username != nil && *update.Username != current.Username {
+		other, err := s.repo.GetUserByUsername(ctx, *update.Username)
+		if err != nil {
+			return errors.Wrap(err, "checking username")
+		}
+		if other != nil {
+			return errors.NewError(errors.UserAlreadyExists, http.StatusBadRequest, "username already taken")
+		}
+	}
+	if update.Email != nil && *update.Email != current.Email {
+		other, err := s.repo.GetUserByEmail(ctx, *update.Email)
+		if err != nil {
+			return errors.Wrap(err, "checking email")
+		}
+		if other != nil {
+			return errors.NewError(errors.UserAlreadyExists, http.StatusBadRequest, "email already taken")
+		}
+	}
+	return nil
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/devbenho/luka-platform/internal/user/models"
 	"github.com/devbenho/luka-platform/pkg/database"
+	apperrors "github.com/devbenho/luka-platform/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -54,13 +55,13 @@ func (r *userRepository) GetUserByID(ctx context.Context, id string) (*models.Us
 
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
-		return nil, errors.New("invalid user ID")
+		return nil, apperrors.NewBadRequestError("invalid user ID")
 	}
 
 	var user models.User
 	filter := bson.M{"_id": objID}
 	if err := r.db.FindOne(ctx, "users", filter, &user); err != nil {
-		if err == mongo.ErrNoDocuments {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, nil
 		}
 		return nil, err
@@ -75,20 +76,21 @@ func (r *userRepository) UpdateUser(ctx context.Context, id string, user *models
 
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
-		return errors.New("invalid user ID")
+		return apperrors.NewBadRequestError("invalid user ID")
 	}
 
 	user.UpdatedAt = time.Now()
 	filter := bson.M{"_id": objID}
 	update := bson.M{
 		"$set": bson.M{
+			"username":   user.Username,
 			"email":      user.Email,
+			"role":       user.Role,
 			"updated_at": user.UpdatedAt,
 		},
 	}
 
-	r.db.Update(ctx, "users", filter, update)
-	return nil
+	return r.db.Update(ctx, "users", filter, update)
 }
 
 // DeleteUser deletes a user by their ID from the database
@@ -98,7 +100,7 @@ func (r *userRepository) DeleteUser(ctx context.Context, id string) error {
 
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
-		return errors.New("invalid user ID")
+		return apperrors.NewBadRequestError("invalid user ID")
 	}
 
 	filter := bson.M{"_id": objID}
@@ -133,7 +135,7 @@ func (r *userRepository) GetUserByEmail(ctx context.Context, email string) (*mod
 	filter := bson.M{"email": email}
 	err := r.db.FindOne(ctx, "users", filter, user)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, nil
 		}
 		return nil, err
@@ -152,6 +154,9 @@ func (r *userRepository) GetUserByUsername(ctx context.Context, username string)
 
 	err := r.db.FindOne(ctx, "users", filter, user)
 	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return user, nil

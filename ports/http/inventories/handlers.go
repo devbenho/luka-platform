@@ -39,8 +39,7 @@ func (h *InventoryHandler) Create(c *gin.Context) {
 	}
 	result, err := h.service.CreateInventory(c.Request.Context(), createInventoryRequest)
 	if err != nil {
-		apiError := errors.MapErrorToHTTP(err)
-		c.JSON(apiError.Status, apiError)
+		errors.Respond(c, err)
 		return
 	}
 
@@ -70,8 +69,7 @@ func (h *InventoryHandler) Update(c *gin.Context) {
 	}
 	inventory, err := h.service.UpdateInventory(c.Request.Context(), id, updateInventoryRequest)
 	if err != nil {
-		apiError := errors.MapErrorToHTTP(err)
-		c.JSON(apiError.Status, apiError)
+		errors.Respond(c, err)
 		return
 	}
 
@@ -93,8 +91,7 @@ func (h *InventoryHandler) GetById(c *gin.Context) {
 	id := c.Param("id")
 	inventory, err := h.service.GetInventoryByID(c.Request.Context(), id)
 	if err != nil {
-		apiError := errors.MapErrorToHTTP(err)
-		c.JSON(apiError.Status, apiError)
+		errors.Respond(c, err)
 		return
 	}
 
@@ -116,8 +113,7 @@ func (h *InventoryHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	err := h.service.DeleteInventory(c.Request.Context(), id)
 	if err != nil {
-		apiError := errors.MapErrorToHTTP(err)
-		c.JSON(apiError.Status, apiError)
+		errors.Respond(c, err)
 		return
 	}
 

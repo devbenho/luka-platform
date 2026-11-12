@@ -2,7 +2,6 @@ package dtos
 
 import (
 	"github.com/devbenho/luka-platform/internal/store/models"
-	"github.com/go-playground/validator/v10"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -21,21 +20,13 @@ type CreateStoreResponse struct {
 	Slug string `json:"slug"`
 }
 
-func (c *CreateStoreRequest) Validate() error {
-	validator := validator.New()
-	c.OwnerId = primitive.NewObjectID()
-	if err := validator.Struct(c); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (c *CreateStoreRequest) ToStore() *models.Store {
 	return &models.Store{
 		Name:             c.Name,
 		Slug:             c.Slug,
 		OwnerId:          c.OwnerId,
 		Location:         c.Location,
+		Type:             c.StoreType,
 		SocialMediaLinks: c.SocialMediaLinks,
 	}
 }
