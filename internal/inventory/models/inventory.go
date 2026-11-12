@@ -13,7 +13,7 @@ type Inventory struct {
 	StoreID     primitive.ObjectID `bson:"store_id" json:"store_id" validate:"required"`
 	Quantity    int                `bson:"quantity" json:"quantity" validate:"gte=0"`
 	Status      string             `bson:"status" json:"status" validate:"required,oneof=in_stock out_of_stock low_stock"`
-	MinQuantity int                `bson:"min_quantity" json:"min_quantity" validate:"required,gte=0"`
+	MinQuantity int                `bson:"min_quantity" json:"min_quantity" validate:"gte=0"`
 	MaxQuantity int                `bson:"max_quantity" json:"max_quantity" validate:"required,gtfield=MinQuantity"`
 	CreatedAt   time.Time          `bson:"created_at" json:"created_at"`
 	UpdatedAt   time.Time          `bson:"updated_at" json:"updated_at"`

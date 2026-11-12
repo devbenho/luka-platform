@@ -17,6 +17,9 @@ import (
 type IOrderRepository interface {
 	CreateOrder(ctx context.Context, order *models.Order) (*models.Order, error)
 	UpdateOrder(ctx context.Context, id string, order *models.Order) error
+	// UpdateOrderStatus moves the order from status `from` to `to` only if it
+	// is still in `from`; otherwise it returns mongo.ErrNoDocuments.
+	UpdateOrderStatus(ctx context.Context, id string, from, to models.OrderStatus) error
 	// GetOrderByID returns (nil, nil) when no order has the given ID.
 	GetOrderByID(ctx context.Context, id string) (*models.Order, error)
 	ListOrders(ctx context.Context, customerID string) ([]models.Order, error)
@@ -56,6 +59,16 @@ func (r *OrderRepository) UpdateOrder(ctx context.Context, id string, order *mod
 		return fmt.Errorf("failed to update order in db: %w", err)
 	}
 	return nil
+}
+
+func (r *OrderRepository) UpdateOrderStatus(ctx context.Context, id string, from, to models.OrderStatus) error {
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return apperrors.NewBadRequestError("invalid order ID")
+	}
+	filter := bson.M{"_id": objID, "status": from}
+	update := bson.M{"$set": bson.M{"status": to, "updatedAt": time.Now()}}
+	return r.db.Update(ctx, "orders", filter, update)
 }
 
 func (r *OrderRepository) GetOrderByID(ctx context.Context, id string) (*models.Order, error) {

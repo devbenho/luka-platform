@@ -19,10 +19,13 @@ const (
 )
 
 type OrderItem struct {
-	ProductID  primitive.ObjectID `bson:"productID" json:"product_id"`
-	Quantity   int                `bson:"quantity" json:"quantity"`
-	UnitPrice  float64            `bson:"unitPrice" json:"unit_price"`
-	TotalPrice float64            `bson:"totalPrice" json:"total_price"`
+	ProductID primitive.ObjectID `bson:"productID" json:"product_id"`
+	// InventoryID is the inventory record the item's stock was reserved from,
+	// used to release the stock if the order is cancelled.
+	InventoryID primitive.ObjectID `bson:"inventoryID,omitempty" json:"inventory_id,omitempty"`
+	Quantity    int                `bson:"quantity" json:"quantity"`
+	UnitPrice   float64            `bson:"unitPrice" json:"unit_price"`
+	TotalPrice  float64            `bson:"totalPrice" json:"total_price"`
 }
 
 type Order struct {

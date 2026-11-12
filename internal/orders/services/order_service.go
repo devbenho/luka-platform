@@ -7,15 +7,14 @@ import (
 	"log"
 	"time"
 
-	inventoryDTOs "github.com/devbenho/luka-platform/internal/inventory/dtos"
 	"github.com/devbenho/luka-platform/internal/inventory/services"
 	"github.com/devbenho/luka-platform/internal/orders/models"
 	dtos "github.com/devbenho/luka-platform/internal/orders/order_dtos"
 	"github.com/devbenho/luka-platform/internal/orders/repositories"
 	productService "github.com/devbenho/luka-platform/internal/product/services"
-	"github.com/devbenho/luka-platform/internal/utils"
 	"github.com/devbenho/luka-platform/pkg/errors"
 	"github.com/devbenho/luka-platform/pkg/validation"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type IOrderService interface {
@@ -48,24 +47,19 @@ func NewOrderService(
 
 func (s *OrderService) CreateOrder(ctx context.Context, dto dtos.CreateOrderRequest) (*models.Order, error) {
 	if err := s.validator.ValidateStruct(dto); err != nil {
-		if validationErrors, ok := err.(errors.ValidationErrors); ok {
-			validationErrorsResult := validationErrors
-			return nil, validationErrorsResult
-		}
 		return nil, err
 	}
 
 	orderItems, totalAmount, err := s.prepareOrderItems(ctx, dto.Items)
 	if err != nil {
-		return nil, errors.Wrap(err, "preparing order items")
+		return nil, err
+	}
+
+	if err := s.reserveInventory(ctx, orderItems); err != nil {
+		return nil, err
 	}
 
 	order := s.buildOrder(dto, orderItems, totalAmount)
-
-	if err := s.reserveInventory(ctx, orderItems); err != nil {
-		return nil, errors.Wrap(err, "reserving inventory")
-	}
-
 	createdOrder, err := s.repo.CreateOrder(ctx, order)
 	if err != nil {
 		message := fmt.Sprintf("creating order: %v", err)
@@ -92,6 +86,8 @@ func (s *OrderService) CreateOrder(ctx context.Context, dto dtos.CreateOrderRequ
 	return createdOrder, nil
 }
 
+// prepareOrderItems prices each requested item from the product catalogue.
+// Stock is checked atomically when it is reserved, not here.
 func (s *OrderService) prepareOrderItems(ctx context.Context, items []dtos.CreateOrderItemRequest) ([]models.OrderItem, float64, error) {
 	var totalAmount float64
 	orderItems := make([]models.OrderItem, len(items))
@@ -99,19 +95,7 @@ func (s *OrderService) prepareOrderItems(ctx context.Context, items []dtos.Creat
 	for i, item := range items {
 		product, err := s.productService.GetProductByID(ctx, item.ProductID.Hex())
 		if err != nil {
-			return nil, 0, errors.NewNotFoundError("product", item.ProductID.Hex())
-		}
-
-		inventory, err := s.inventoryService.GetInventoryByID(ctx, item.ProductID.Hex())
-		if err != nil {
-			return nil, 0, errors.NewNotFoundError("inventory", item.ProductID.Hex())
-		}
-
-		if inventory.Quantity < item.Quantity {
-			return nil, 0, errors.NewConflictError(fmt.Sprintf(
-				"insufficient stock for product %s: requested %d, available %d",
-				item.ProductID.Hex(), item.Quantity, inventory.Quantity,
-			))
+			return nil, 0, err
 		}
 
 		itemTotal := float64(item.Quantity) * product.Price
@@ -140,30 +124,36 @@ func (s *OrderService) buildOrder(dto dtos.CreateOrderRequest, items []models.Or
 	}
 }
 
+// reserveInventory reserves stock for every item, recording on each item the
+// inventory record it came from. If any item cannot be reserved, the items
+// already reserved are released before the error is returned.
 func (s *OrderService) reserveInventory(ctx context.Context, items []models.OrderItem) error {
-	for _, item := range items {
-		updateReq := inventoryDTOs.UpdateInventoryRequest{
-			Quantity: utils.IntPtr(-item.Quantity),
+	for i := range items {
+		inventoryID, err := s.inventoryService.ReserveStock(ctx, items[i].ProductID, items[i].Quantity)
+		if err != nil {
+			if rollbackErr := s.rollbackInventory(ctx, items[:i]); rollbackErr != nil {
+				log.Printf("reserving stock failed and releasing earlier items was incomplete: %v", rollbackErr)
+				return errors.NewInternalError("reserving inventory", stderrors.Join(err, rollbackErr))
+			}
+			return err
 		}
-		if _, err := s.inventoryService.UpdateInventory(ctx, item.ProductID.Hex(), updateReq); err != nil {
-			return errors.Wrap(err, "updating inventory quantity")
-		}
+		items[i].InventoryID = inventoryID
 	}
 	return nil
 }
 
-// rollbackInventory restores the quantities reserved by reserveInventory.
-// It attempts every item and returns all failures joined, so a partial
-// rollback is never silently lost.
+// rollbackInventory releases the stock reserved for items. It attempts every
+// item and returns all failures joined, so a partial rollback is never
+// silently lost.
 func (s *OrderService) rollbackInventory(ctx context.Context, items []models.OrderItem) error {
 	var errs []error
 	for _, item := range items {
-		updateReq := inventoryDTOs.UpdateInventoryRequest{
-			Quantity: utils.IntPtr(item.Quantity),
+		if item.InventoryID.IsZero() {
+			continue
 		}
-		productID := item.ProductID.Hex()
-		if _, err := s.inventoryService.UpdateInventory(ctx, productID, updateReq); err != nil {
-			errs = append(errs, fmt.Errorf("rolling back inventory for product %s (quantity %d): %w", productID, item.Quantity, err))
+		if err := s.inventoryService.ReleaseStock(ctx, item.InventoryID, item.Quantity); err != nil {
+			errs = append(errs, fmt.Errorf("releasing stock for product %s (inventory %s, quantity %d): %w",
+				item.ProductID.Hex(), item.InventoryID.Hex(), item.Quantity, err))
 		}
 	}
 	return stderrors.Join(errs...)
@@ -176,18 +166,29 @@ func (s *OrderService) UpdateOrderStatus(ctx context.Context, id string, status 
 
 	order, err := s.GetOrderByID(ctx, id)
 	if err != nil {
-		return errors.Wrap(err, "fetching order")
+		return err
 	}
 
 	if !isValidStatusTransition(order.Status, status) {
 		return errors.NewBadRequestError("invalid status transition")
 	}
 
-	order.Status = status
-	order.UpdatedAt = time.Now()
-
-	if err := s.repo.UpdateOrder(ctx, id, order); err != nil {
+	// Only succeeds if nobody changed the status since we read it, so
+	// concurrent requests cannot both cancel (and release stock twice).
+	err = s.repo.UpdateOrderStatus(ctx, id, order.Status, status)
+	if stderrors.Is(err, mongo.ErrNoDocuments) {
+		return errors.NewConflictError("order status changed concurrently; retry")
+	}
+	if err != nil {
 		return errors.Wrap(err, "updating order status")
+	}
+
+	if status == models.OrderStatusCancelled {
+		if err := s.rollbackInventory(ctx, order.Items); err != nil {
+			// The order is cancelled either way; surface the stock leak to
+			// operators rather than failing a request that cannot be retried.
+			log.Printf("order %s cancelled but releasing its stock was incomplete: %v", id, err)
+		}
 	}
 
 	return nil

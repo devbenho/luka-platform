@@ -107,8 +107,14 @@ func (d *Database) Delete(ctx context.Context, collection string, filter interfa
 	ctx, cancel := context.WithTimeout(ctx, DatabaseTimeout)
 	defer cancel()
 
-	_, err := d.database.Collection(collection).DeleteOne(ctx, filter)
-	return err
+	result, err := d.database.Collection(collection).DeleteOne(ctx, filter)
+	if err != nil {
+		return err
+	}
+	if result.DeletedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }
 
 func (d *Database) DeleteAll(ctx context.Context, collection string, filter interface{}) error {
