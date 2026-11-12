@@ -23,10 +23,14 @@ func setTestEnv(t *testing.T) {
 
 func signToken(t *testing.T, secret string, exp time.Time) string {
 	t.Helper()
-	claims := jwt.MapClaims{
+	return signClaims(t, secret, jwt.MapClaims{
 		"payload": map[string]interface{}{"Id": "user-1", "Role": "admin"},
 		"exp":     exp.Unix(),
-	}
+	})
+}
+
+func signClaims(t *testing.T, secret string, claims jwt.MapClaims) string {
+	t.Helper()
 	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(secret))
 	if err != nil {
 		t.Fatalf("signing test token: %v", err)
@@ -38,7 +42,7 @@ func TestJWT(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	setTestEnv(t)
 
-	validToken, err := tokens.GenerateAccessToken(map[string]interface{}{"Id": "user-1", "Role": "admin"})
+	validToken, err := tokens.GenerateAccessToken(map[string]interface{}{"Id": "user-1", "Role": "admin", "Username": "alice"})
 	if err != nil {
 		t.Fatalf("generating token: %v", err)
 	}
@@ -53,15 +57,17 @@ func TestJWT(t *testing.T) {
 		{name: "malformed token", header: "Bearer not-a-jwt", wantStatus: http.StatusUnauthorized},
 		{name: "wrong signing secret", header: "Bearer " + signToken(t, "other-secret", time.Now().Add(time.Hour)), wantStatus: http.StatusUnauthorized},
 		{name: "expired token", header: "Bearer " + signToken(t, testSecret, time.Now().Add(-time.Hour)), wantStatus: http.StatusUnauthorized},
+		{name: "token without expiry", header: "Bearer " + signClaims(t, testSecret, jwt.MapClaims{"payload": map[string]interface{}{"Id": "user-1"}}), wantStatus: http.StatusUnauthorized},
 		{name: "valid bearer token", header: "Bearer " + validToken, wantStatus: http.StatusOK, wantUserID: "user-1"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var gotUserID interface{}
+			var gotUserID, gotUsername interface{}
 			router := gin.New()
 			router.GET("/protected", JWT("access"), func(c *gin.Context) {
 				gotUserID, _ = c.Get("userId")
+				gotUsername, _ = c.Get("username")
 				c.Status(http.StatusOK)
 			})
 
@@ -77,6 +83,9 @@ func TestJWT(t *testing.T) {
 			}
 			if tt.wantStatus == http.StatusOK && gotUserID != tt.wantUserID {
 				t.Errorf("userId in context = %v, want %v", gotUserID, tt.wantUserID)
+			}
+			if tt.wantStatus == http.StatusOK && gotUsername != "alice" {
+				t.Errorf("username in context = %v, want alice", gotUsername)
 			}
 			if tt.wantStatus != http.StatusOK && gotUserID != nil {
 				t.Error("handler must not run when authentication fails")
