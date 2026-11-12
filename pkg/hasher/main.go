@@ -1,8 +1,9 @@
 package hasher
 
 import (
+	"fmt"
+
 	"golang.org/x/crypto/bcrypt"
-	"log"
 )
 
 type Hasher interface {
@@ -19,10 +20,11 @@ type hasher struct {
 }
 
 func (h *hasher) Hash(password string) (string, error) {
-	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	log.Println("Hahshing password ", password, " to ", string(hashedPassword))
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", fmt.Errorf("hashing password: %w", err)
+	}
 	return string(hashedPassword), nil
-
 }
 
 func (h *hasher) Compare(hashedPassword, password string) error {

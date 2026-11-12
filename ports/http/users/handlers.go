@@ -42,11 +42,7 @@ func (h *UserHandler) Register(c *gin.Context) {
 		return
 	}
 
-	log.Println(createUserRequest)
-
 	result, err := h.service.Register(c.Request.Context(), &createUserRequest)
-	log.Println(result)
-	log.Println(err)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.NewErrorResponse(http.StatusInternalServerError, "Failed to register user", err.Error()))
 		return
@@ -103,7 +99,6 @@ func (h *UserHandler) GetUserByID(c *gin.Context) {
 		c.JSON(http.StatusNotFound, utils.NewErrorResponse(http.StatusNotFound, "User not found", err.Error()))
 		return
 	}
-	log.Printf("user: %+v", user)
 	c.JSON(http.StatusOK, user)
 }
 
