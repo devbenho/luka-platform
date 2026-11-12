@@ -48,11 +48,11 @@ func GenerateAccessToken(payload map[string]interface{}) (string, error) {
 
 func ValidateToken(jwtToken string) (map[string]interface{}, error) {
 	cfg := config.GetConfig()
-	cleanJWT := strings.Replace(jwtToken, "Bearer ", "", -1)
+	cleanJWT := strings.TrimPrefix(jwtToken, "Bearer ")
 	tokenData := jwt.MapClaims{}
 	token, err := jwt.ParseWithClaims(cleanJWT, tokenData, func(token *jwt.Token) (interface{}, error) {
 		return []byte(cfg.JWT.Secret), nil
-	})
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithExpirationRequired())
 
 	if err != nil {
 		return nil, err

@@ -1,7 +1,9 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 
@@ -32,8 +34,8 @@ var (
 
 func LoadConfig() (*Config, error) {
 	var config Config
-	err := godotenv.Load(".env")
-	if err != nil {
+	// A missing .env is normal when settings come from the environment.
+	if err := godotenv.Load(".env"); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		log.Printf("Error loading .env file, relying on system environment variables: %s", err)
 	}
 
