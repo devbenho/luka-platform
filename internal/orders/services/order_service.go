@@ -4,6 +4,7 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"log"
 	"time"
 
 	inventoryDTOs "github.com/devbenho/luka-platform/internal/inventory/dtos"
@@ -70,6 +71,9 @@ func (s *OrderService) CreateOrder(ctx context.Context, dto dtos.CreateOrderRequ
 		message := fmt.Sprintf("creating order: %v", err)
 		cause := err
 		if rollbackErr := s.rollbackInventory(ctx, orderItems); rollbackErr != nil {
+			// The HTTP layer returns only the message, so record which items
+			// were left reserved for operators.
+			log.Printf("order creation failed for customer %s and inventory rollback was incomplete: %v", dto.CustomerID.Hex(), rollbackErr)
 			message += "; inventory rollback failed"
 			cause = stderrors.Join(err, rollbackErr)
 		}
