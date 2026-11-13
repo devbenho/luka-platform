@@ -41,8 +41,7 @@ func (h *OrderHandler) Create(c *gin.Context) {
 
 	result, err := h.service.CreateOrder(c.Request.Context(), createOrderRequest)
 	if err != nil {
-		apiError := errors.MapErrorToHTTP(err)
-		c.JSON(apiError.Status, apiError)
+		errors.Respond(c, err)
 		return
 	}
 
@@ -73,8 +72,7 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 
 	err := h.service.UpdateOrderStatus(c.Request.Context(), id, status)
 	if err != nil {
-		apiError := errors.MapErrorToHTTP(err)
-		c.JSON(apiError.Status, apiError)
+		errors.Respond(c, err)
 		return
 	}
 
@@ -96,8 +94,7 @@ func (h *OrderHandler) GetById(c *gin.Context) {
 	id := c.Param("id")
 	order, err := h.service.GetOrderByID(c.Request.Context(), id)
 	if err != nil {
-		apiError := errors.MapErrorToHTTP(err)
-		c.JSON(apiError.Status, apiError)
+		errors.Respond(c, err)
 		return
 	}
 
@@ -118,8 +115,7 @@ func (h *OrderHandler) List(c *gin.Context) {
 	customerID := c.Query("customer_id")
 	orders, err := h.service.ListOrders(c.Request.Context(), customerID)
 	if err != nil {
-		apiError := errors.MapErrorToHTTP(err)
-		c.JSON(apiError.Status, apiError)
+		errors.Respond(c, err)
 		return
 	}
 

@@ -243,7 +243,6 @@ func (s *OrderService) GetOrderByID(ctx context.Context, id string) (*models.Ord
 
 	order, err := s.repo.GetOrderByID(ctx, id)
 	if err != nil {
-		// Remove the extra argument
 		return nil, errors.Wrap(err, "fetching order")
 	}
 
@@ -265,15 +264,7 @@ func (s *OrderService) ListOrders(ctx context.Context, customerID string) ([]mod
 
 	orders, err := s.repo.ListOrders(ctx, customerID)
 	if err != nil {
-		// Use NewError when we need to add metadata
-		return nil, errors.NewError(
-			errors.InternalServerType,
-			500,
-			fmt.Sprintf("listing orders: %v", err),
-			errors.WithMetadata(map[string]interface{}{
-				"customer_id": customerID,
-			}),
-		)
+		return nil, errors.Wrap(err, "listing orders")
 	}
 
 	return orders, nil

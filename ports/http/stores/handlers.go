@@ -6,6 +6,7 @@ import (
 	"github.com/devbenho/luka-platform/internal/store/dtos"
 	"github.com/devbenho/luka-platform/internal/store/services"
 	"github.com/devbenho/luka-platform/internal/utils"
+	middleware "github.com/devbenho/luka-platform/pkg/middlewares"
 	"github.com/devbenho/luka-platform/pkg/slug"
 	errors "github.com/devbenho/luka-platform/ports/http/errors"
 	"github.com/gin-gonic/gin"
@@ -35,21 +36,15 @@ func NewStoreHandler(service services.IStoreService) *StoreHandler {
 // @Security BearerAuth
 // @Router /stores [post]
 func (h *StoreHandler) Create(c *gin.Context) {
-	value, exists := c.Get("userId")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, utils.NewErrorResponse(http.StatusUnauthorized, "Unauthorized", "Unauthorized"))
-		return
-	}
-
-	userIdStr, ok := value.(string)
+	userIdStr, ok := middleware.UserID(c)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, utils.NewErrorResponse(http.StatusInternalServerError, "Invalid user ID", "Invalid user ID"))
+		c.JSON(http.StatusUnauthorized, utils.NewUnauthorizedResponse("User not authenticated"))
 		return
 	}
 
 	userId, err := primitive.ObjectIDFromHex(userIdStr)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, utils.NewErrorResponse(http.StatusInternalServerError, "Invalid user ID format", err.Error()))
+		c.JSON(http.StatusUnauthorized, utils.NewUnauthorizedResponse("Invalid user ID in token"))
 		return
 	}
 
@@ -64,7 +59,7 @@ func (h *StoreHandler) Create(c *gin.Context) {
 
 	result, err := h.service.CreateStore(c.Request.Context(), &createStoreRequest)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, utils.NewErrorResponse(http.StatusInternalServerError, "Failed to register user", err.Error()))
+		errors.Respond(c, err)
 		return
 	}
 
@@ -87,8 +82,7 @@ func (h *StoreHandler) GetById(c *gin.Context) {
 	id := c.Param("id")
 	store, err := h.service.GetStoreByID(c.Request.Context(), id)
 	if err != nil {
-		apiError := errors.MapErrorToHTTP(err)
-		c.JSON(apiError.Status, apiError)
+		errors.Respond(c, err)
 		return
 	}
 
@@ -112,16 +106,16 @@ func (h *StoreHandler) GetById(c *gin.Context) {
 // @Router /stores/{id} [put]
 func (h *StoreHandler) Update(c *gin.Context) {
 	id := c.Param("id")
+	userID, _ := middleware.UserID(c)
 	var updateStoreRequest dtos.UpdateStoreRequest
 	if err := c.ShouldBindJSON(&updateStoreRequest); err != nil {
 		c.JSON(http.StatusBadRequest, utils.NewErrorResponse(http.StatusBadRequest, "Invalid input", err.Error()))
 		return
 	}
 
-	store, err := h.service.UpdateStore(c.Request.Context(), id, &updateStoreRequest)
+	store, err := h.service.UpdateStore(c.Request.Context(), id, userID, &updateStoreRequest)
 	if err != nil {
-		apiError := errors.MapErrorToHTTP(err)
-		c.JSON(apiError.Status, apiError)
+		errors.Respond(c, err)
 		return
 	}
 
@@ -142,10 +136,10 @@ func (h *StoreHandler) Update(c *gin.Context) {
 // @Router /stores/{id} [delete]
 func (h *StoreHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
-	err := h.service.DeleteStore(c.Request.Context(), id)
+	userID, _ := middleware.UserID(c)
+	err := h.service.DeleteStore(c.Request.Context(), id, userID)
 	if err != nil {
-		apiError := errors.MapErrorToHTTP(err)
-		c.JSON(apiError.Status, apiError)
+		errors.Respond(c, err)
 		return
 	}
 

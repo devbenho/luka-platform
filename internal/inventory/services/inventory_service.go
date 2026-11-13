@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/devbenho/luka-platform/internal/inventory/dtos"
 	"github.com/devbenho/luka-platform/internal/inventory/models"
@@ -45,13 +44,12 @@ func (s *InventoryService) CreateInventory(ctx context.Context, dto dtos.CreateI
 
 func (s *InventoryService) UpdateInventory(ctx context.Context, id string, updateBody dtos.UpdateInventoryRequest) (*models.Inventory, error) {
 	if err := s.validator.ValidateStruct(updateBody); err != nil {
-		log.Println(`lol: `, err)
 		return nil, fmt.Errorf("invalid update request: %w", err)
 	}
 
-	existingInventory, err := s.repo.GetInventoryByID(ctx, id)
+	existingInventory, err := s.GetInventoryByID(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch inventory: %w", err)
+		return nil, err
 	}
 	if existingInventory == nil {
 		return nil, errors.NewNotFoundError(

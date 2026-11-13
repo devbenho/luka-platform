@@ -31,16 +31,11 @@ func NewCategoryService(repository repositories.ICategoryRepository, validator *
 
 func (s *CategoryService) CreateCategory(ctx context.Context, category *dtos.CreateCategoryRequest) (*dtos.CreateCategoryResponse, error) {
 	if err := s.validator.ValidateStruct(category); err != nil {
-		if validationErrors, ok := err.(errors.ValidationErrors); ok {
-			validationErrorsResult := validationErrors
-			return nil, validationErrorsResult
-		}
 		return nil, err
 	}
 	categoryResult, err := s.repo.CreateCategory(ctx, category.ToCategory())
-
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "creating category")
 	}
 
 	return &dtos.CreateCategoryResponse{
@@ -48,56 +43,45 @@ func (s *CategoryService) CreateCategory(ctx context.Context, category *dtos.Cre
 	}, nil
 }
 
+// GetCategoryByID returns the category, or a not-found error when it does not
+// exist or has been soft-deleted.
 func (s *CategoryService) GetCategoryByID(ctx context.Context, id string) (*models.Category, error) {
 	category, err := s.repo.GetCategoryByID(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "fetching category")
 	}
-	if category.DeletedAt != nil {
+	if category == nil || category.DeletedAt != nil {
 		return nil, errors.NewNotFoundError("category", id)
 	}
 	return category, nil
 }
 
-func (s *CategoryService) UpdateCategory(ctx context.Context, id string, category *dtos.UpdateCategoryRequest) (*models.Category, error) {
-	if err := s.validator.ValidateStruct(category); err != nil {
-		if validationErrors, ok := err.(errors.ValidationErrors); ok {
-			return nil, validationErrors
-		}
+func (s *CategoryService) UpdateCategory(ctx context.Context, id string, update *dtos.UpdateCategoryRequest) (*models.Category, error) {
+	if err := s.validator.ValidateStruct(update); err != nil {
 		return nil, err
 	}
 
-	existingCategory, err := s.repo.GetCategoryByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	if existingCategory.DeletedAt != nil {
-		return nil, errors.NewNotFoundError("category", id)
-	}
-
-	updatedCategory, _ := category.ToCategory()
-	updatedCategory.ID = existingCategory.ID
-
-	err = s.repo.UpdateCategory(ctx, id, &updatedCategory)
+	category, err := s.GetCategoryByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	return &updatedCategory, nil
+	if err := update.ApplyTo(category); err != nil {
+		return nil, err
+	}
+	if err := s.repo.UpdateCategory(ctx, id, category); err != nil {
+		return nil, errors.Wrap(err, "updating category")
+	}
+
+	return category, nil
 }
 
 func (s *CategoryService) DeleteCategory(ctx context.Context, id string) error {
-	category, err := s.repo.GetCategoryByID(ctx, id)
-	if err != nil {
+	if _, err := s.GetCategoryByID(ctx, id); err != nil {
 		return err
 	}
-	if category.DeletedAt != nil {
-		return errors.NewNotFoundError("category", id)
+	if err := s.repo.DeleteCategory(ctx, id); err != nil {
+		return errors.Wrap(err, "deleting category")
 	}
-	err = s.repo.UpdateCategory(ctx, id, category)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }

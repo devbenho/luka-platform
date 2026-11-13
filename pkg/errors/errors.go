@@ -10,6 +10,7 @@ const (
 	ValidationErrorType  ErrorType = "VALIDATION_ERROR"
 	NotFoundErrorType    ErrorType = "NOT_FOUND"
 	UnauthorizedType     ErrorType = "UNAUTHORIZED"
+	ForbiddenType        ErrorType = "FORBIDDEN"
 	InternalServerType   ErrorType = "INTERNAL_SERVER_ERROR"
 	ConflictType         ErrorType = "CONFLICT"
 	BadRequestType       ErrorType = "BAD_REQUEST"
@@ -86,6 +87,10 @@ func NewNotFoundError(entity, value string) *AppError {
 
 func NewUnauthorizedError(message string) *AppError {
 	return NewError(UnauthorizedType, 401, message)
+}
+
+func NewForbiddenError(message string) *AppError {
+	return NewError(ForbiddenType, 403, message)
 }
 
 func NewInternalError(message string, cause error) *AppError {

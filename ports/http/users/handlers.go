@@ -1,13 +1,12 @@
 package users
 
 import (
-	"fmt"
-	"log"
 	"net/http"
 
 	dtos "github.com/devbenho/luka-platform/internal/user/dtos/users"
 	"github.com/devbenho/luka-platform/internal/user/services"
 	"github.com/devbenho/luka-platform/internal/utils"
+	errors "github.com/devbenho/luka-platform/ports/http/errors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -33,18 +32,16 @@ func NewUserHandler(service services.IUserService) *UserHandler {
 // @Failure 500 {object} utils.Response
 // @Router /auth/register [post]
 func (h *UserHandler) Register(c *gin.Context) {
-	fmt.Println("register user handler")
 	var createUserRequest dtos.CreateUserRequest
 
 	if err := c.ShouldBindJSON(&createUserRequest); err != nil {
-		log.Println(err)
 		c.JSON(http.StatusBadRequest, utils.NewErrorResponse(http.StatusBadRequest, "Invalid input", err.Error()))
 		return
 	}
 
 	result, err := h.service.Register(c.Request.Context(), &createUserRequest)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, utils.NewErrorResponse(http.StatusInternalServerError, "Failed to register user", err.Error()))
+		errors.Respond(c, err)
 		return
 	}
 
@@ -73,7 +70,7 @@ func (h *UserHandler) Login(c *gin.Context) {
 
 	response, err := h.service.Login(c.Request.Context(), &authDTO)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, utils.NewErrorResponse(http.StatusUnauthorized, "Failed to login", err.Error()))
+		errors.Respond(c, err)
 		return
 	}
 
@@ -96,7 +93,7 @@ func (h *UserHandler) GetUserByID(c *gin.Context) {
 
 	user, err := h.service.GetUserByID(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, utils.NewErrorResponse(http.StatusNotFound, "User not found", err.Error()))
+		errors.Respond(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, user)
@@ -126,7 +123,7 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 
 	updatedUser, err := h.service.UpdateUser(c.Request.Context(), id, &updateUserRequest)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, utils.NewErrorResponse(http.StatusInternalServerError, "Failed to update user", err.Error()))
+		errors.Respond(c, err)
 		return
 	}
 
@@ -146,7 +143,7 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 	id := c.Param("id")
 
 	if err := h.service.DeleteUser(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, utils.NewErrorResponse(http.StatusInternalServerError, "Failed to delete user", err.Error()))
+		errors.Respond(c, err)
 		return
 	}
 

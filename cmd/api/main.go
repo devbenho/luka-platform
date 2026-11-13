@@ -33,7 +33,12 @@ import (
 // @description Type "Bearer" followed by a space and JWT token.
 
 func main() {
-	cfg, _ := config.LoadConfig()
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		// Refuse to start without required settings (e.g. an empty JWT secret
+		// would let anyone forge tokens).
+		log.Fatalf("Invalid configuration: %v", err)
+	}
 
 	// Initialize logger
 	logger, err := zap.NewProduction()

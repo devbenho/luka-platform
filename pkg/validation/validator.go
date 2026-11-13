@@ -12,9 +12,24 @@ type Validator struct {
 
 // NewValidator creates a new Validator instance
 func NewValidator() *Validator {
-	return &Validator{
-		validate: validator.New(),
+	v := validator.New()
+	// "slug": lowercase letters, digits and hyphens only. Registered here so
+	// every DTO validated through this Validator can use it.
+	if err := v.RegisterValidation("slug", isSlug); err != nil {
+		panic(err)
 	}
+	return &Validator{
+		validate: v,
+	}
+}
+
+func isSlug(fl validator.FieldLevel) bool {
+	for _, char := range fl.Field().String() {
+		if !(char >= 'a' && char <= 'z' || char >= '0' && char <= '9' || char == '-') {
+			return false
+		}
+	}
+	return true
 }
 
 // ValidateStruct validates a struct based on the tags

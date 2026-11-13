@@ -20,8 +20,7 @@ type IDatabase interface {
 	Update(ctx context.Context, collection string, filter, update interface{}) error
 	Delete(ctx context.Context, collection string, filter interface{}) error
 	DeleteAll(ctx context.Context, collection string, filter interface{}) error
-	SoftDelete(ctx context.Context, collection string, filter interface{}) error
-	FindById(ctx context.Context, collection, id string, result interface{}) error
+	SoftDelete(ctx context.Context, collection, deletedAtField string, filter interface{}) error
 	FindOne(ctx context.Context, collection string, filter, result interface{}) error
 	Find(ctx context.Context, collection string, filter, result interface{}) error
 	Count(ctx context.Context, collection string, filter interface{}) (int64, error)
@@ -94,8 +93,14 @@ func (d *Database) Update(ctx context.Context, collection string, filter, update
 	ctx, cancel := context.WithTimeout(ctx, DatabaseTimeout)
 	defer cancel()
 
-	_, err := d.database.Collection(collection).UpdateOne(ctx, filter, update)
-	return err
+	result, err := d.database.Collection(collection).UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }
 
 func (d *Database) Delete(ctx context.Context, collection string, filter interface{}) error {
@@ -114,10 +119,13 @@ func (d *Database) DeleteAll(ctx context.Context, collection string, filter inte
 	return err
 }
 
-func (d *Database) SoftDelete(ctx context.Context, collection string, filter interface{}) error {
+// SoftDelete sets deletedAtField to the current time on the first document
+// matching filter. Each model stores its deletion timestamp under its own
+// bson field name, so callers must pass it explicitly.
+func (d *Database) SoftDelete(ctx context.Context, collection, deletedAtField string, filter interface{}) error {
 	ctx, cancel := context.WithTimeout(ctx, DatabaseTimeout)
 	defer cancel()
-	update := bson.M{"$set": bson.M{"DeletedAt": time.Now()}}
+	update := bson.M{"$set": bson.M{deletedAtField: time.Now()}}
 	updateResult, err := d.database.Collection(collection).UpdateOne(ctx, filter, update)
 	if err != nil {
 		return err
@@ -126,15 +134,6 @@ func (d *Database) SoftDelete(ctx context.Context, collection string, filter int
 		return mongo.ErrNoDocuments
 	}
 	return nil
-}
-
-func (d *Database) FindById(ctx context.Context, collection, id string, result interface{}) error {
-	ctx, cancel := context.WithTimeout(ctx, DatabaseTimeout)
-	defer cancel()
-
-	filter := bson.M{"_id": id}
-	err := d.database.Collection(collection).FindOne(ctx, filter).Decode(result)
-	return err
 }
 
 func (d *Database) FindOne(ctx context.Context, collection string, filter, result interface{}) error {
