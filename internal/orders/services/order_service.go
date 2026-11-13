@@ -12,15 +12,21 @@ import (
 	dtos "github.com/devbenho/luka-platform/internal/orders/order_dtos"
 	"github.com/devbenho/luka-platform/internal/orders/repositories"
 	productService "github.com/devbenho/luka-platform/internal/product/services"
+	storeRepositories "github.com/devbenho/luka-platform/internal/store/repositories"
+	storeServices "github.com/devbenho/luka-platform/internal/store/services"
 	"github.com/devbenho/luka-platform/pkg/errors"
 	"github.com/devbenho/luka-platform/pkg/validation"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+// IOrderService manages orders. Access rules:
+//   - an order is visible to its customer and to its seller (the user who
+//     owns the store of every product in the order);
+//   - the customer may only cancel; the seller may make any valid transition.
 type IOrderService interface {
 	CreateOrder(ctx context.Context, dto dtos.CreateOrderRequest) (*models.Order, error)
-	UpdateOrderStatus(ctx context.Context, id string, status models.OrderStatus) error
-	GetOrderByID(ctx context.Context, id string) (*models.Order, error)
+	UpdateOrderStatus(ctx context.Context, id, userID string, status models.OrderStatus) error
+	GetOrderByID(ctx context.Context, id, userID string) (*models.Order, error)
 	ListOrders(ctx context.Context, customerID string) ([]models.Order, error)
 }
 
@@ -28,6 +34,7 @@ type OrderService struct {
 	repo             repositories.IOrderRepository
 	inventoryService services.IInventoryService
 	productService   productService.IProductService
+	storeRepo        storeRepositories.IStoreRepository
 	validator        *validation.Validator
 }
 
@@ -35,12 +42,14 @@ func NewOrderService(
 	repo repositories.IOrderRepository,
 	inventoryService services.IInventoryService,
 	productService productService.IProductService,
+	storeRepo storeRepositories.IStoreRepository,
 	validator *validation.Validator,
 ) *OrderService {
 	return &OrderService{
 		repo:             repo,
 		inventoryService: inventoryService,
 		productService:   productService,
+		storeRepo:        storeRepo,
 		validator:        validator,
 	}
 }
@@ -159,14 +168,28 @@ func (s *OrderService) rollbackInventory(ctx context.Context, items []models.Ord
 	return stderrors.Join(errs...)
 }
 
-func (s *OrderService) UpdateOrderStatus(ctx context.Context, id string, status models.OrderStatus) error {
+func (s *OrderService) UpdateOrderStatus(ctx context.Context, id, userID string, status models.OrderStatus) error {
 	if !isValidStatus(status) {
 		return errors.NewBadRequestError("invalid order status")
 	}
 
-	order, err := s.GetOrderByID(ctx, id)
+	order, err := s.getOrder(ctx, id)
 	if err != nil {
 		return err
+	}
+
+	isSeller, err := s.isSeller(ctx, order, userID)
+	if err != nil {
+		return err
+	}
+	isCustomer := order.CustomerID.Hex() == userID
+	switch {
+	case isSeller:
+	case isCustomer && status == models.OrderStatusCancelled:
+	case isCustomer:
+		return errors.NewForbiddenError("customers can only cancel their orders")
+	default:
+		return errors.NewForbiddenError("you cannot change this order")
 	}
 
 	if !isValidStatusTransition(order.Status, status) {
@@ -233,7 +256,52 @@ func isValidStatus(status models.OrderStatus) bool {
 	return false
 }
 
-func (s *OrderService) GetOrderByID(ctx context.Context, id string) (*models.Order, error) {
+// GetOrderByID returns the order if userID is its customer or seller.
+func (s *OrderService) GetOrderByID(ctx context.Context, id, userID string) (*models.Order, error) {
+	order, err := s.getOrder(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if order.CustomerID.Hex() == userID {
+		return order, nil
+	}
+	isSeller, err := s.isSeller(ctx, order, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !isSeller {
+		return nil, errors.NewForbiddenError("you cannot view this order")
+	}
+	return order, nil
+}
+
+// isSeller reports whether userID owns the store of every product in order.
+func (s *OrderService) isSeller(ctx context.Context, order *models.Order, userID string) (bool, error) {
+	if len(order.Items) == 0 {
+		return false, nil
+	}
+	for _, item := range order.Items {
+		product, err := s.productService.GetProductByID(ctx, item.ProductID.Hex())
+		if err != nil {
+			var appErr *errors.AppError
+			if stderrors.As(err, &appErr) && appErr.Type == errors.NotFoundErrorType {
+				return false, nil
+			}
+			return false, err
+		}
+		err = storeServices.RequireStoreOwner(ctx, s.storeRepo, product.StoreID.Hex(), userID)
+		if err != nil {
+			var appErr *errors.AppError
+			if stderrors.As(err, &appErr) && (appErr.Type == errors.ForbiddenType || appErr.Type == errors.NotFoundErrorType) {
+				return false, nil
+			}
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+func (s *OrderService) getOrder(ctx context.Context, id string) (*models.Order, error) {
 	if ctx.Err() != nil {
 		return nil, errors.Wrap(ctx.Err(), "context cancelled")
 	}

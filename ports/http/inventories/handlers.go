@@ -6,6 +6,7 @@ import (
 	"github.com/devbenho/luka-platform/internal/inventory/dtos"
 	"github.com/devbenho/luka-platform/internal/inventory/services"
 	"github.com/devbenho/luka-platform/internal/utils"
+	middleware "github.com/devbenho/luka-platform/pkg/middlewares"
 	errors "github.com/devbenho/luka-platform/ports/http/errors"
 	"github.com/gin-gonic/gin"
 )
@@ -32,12 +33,13 @@ func NewInventoryHandler(service services.IInventoryService) *InventoryHandler {
 // @Security BearerAuth
 // @Router /inventories [post]
 func (h *InventoryHandler) Create(c *gin.Context) {
+	userID, _ := middleware.UserID(c)
 	var createInventoryRequest dtos.CreateInventoryRequest
 	if err := c.ShouldBindJSON(&createInventoryRequest); err != nil {
 		c.JSON(http.StatusBadRequest, utils.NewErrorResponse(http.StatusBadRequest, "Invalid input", err.Error()))
 		return
 	}
-	result, err := h.service.CreateInventory(c.Request.Context(), createInventoryRequest)
+	result, err := h.service.CreateInventory(c.Request.Context(), userID, createInventoryRequest)
 	if err != nil {
 		errors.Respond(c, err)
 		return
@@ -62,12 +64,13 @@ func (h *InventoryHandler) Create(c *gin.Context) {
 // @Router /inventories/{id} [patch]
 func (h *InventoryHandler) Update(c *gin.Context) {
 	id := c.Param("id")
+	userID, _ := middleware.UserID(c)
 	var updateInventoryRequest dtos.UpdateInventoryRequest
 	if err := c.ShouldBindJSON(&updateInventoryRequest); err != nil {
 		c.JSON(http.StatusBadRequest, utils.NewErrorResponse(http.StatusBadRequest, "Invalid input", err.Error()))
 		return
 	}
-	inventory, err := h.service.UpdateInventory(c.Request.Context(), id, updateInventoryRequest)
+	inventory, err := h.service.UpdateInventory(c.Request.Context(), id, userID, updateInventoryRequest)
 	if err != nil {
 		errors.Respond(c, err)
 		return
@@ -111,7 +114,8 @@ func (h *InventoryHandler) GetById(c *gin.Context) {
 // @Router /inventories/{id} [delete]
 func (h *InventoryHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
-	err := h.service.DeleteInventory(c.Request.Context(), id)
+	userID, _ := middleware.UserID(c)
+	err := h.service.DeleteInventory(c.Request.Context(), id, userID)
 	if err != nil {
 		errors.Respond(c, err)
 		return

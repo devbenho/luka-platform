@@ -8,6 +8,9 @@ import (
 	"github.com/devbenho/luka-platform/internal/inventory/dtos"
 	"github.com/devbenho/luka-platform/internal/inventory/models"
 	"github.com/devbenho/luka-platform/internal/inventory/repositories"
+	productRepositories "github.com/devbenho/luka-platform/internal/product/repositories"
+	storeRepositories "github.com/devbenho/luka-platform/internal/store/repositories"
+	storeServices "github.com/devbenho/luka-platform/internal/store/services"
 	"github.com/devbenho/luka-platform/pkg/errors"
 	"github.com/devbenho/luka-platform/pkg/validation"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -15,9 +18,11 @@ import (
 )
 
 type IInventoryService interface {
-	CreateInventory(ctx context.Context, dto dtos.CreateInventoryRequest) (*models.Inventory, error)
-	UpdateInventory(ctx context.Context, id string, dto dtos.UpdateInventoryRequest) (*models.Inventory, error)
-	DeleteInventory(ctx context.Context, id string) error
+	// CreateInventory, UpdateInventory and DeleteInventory require userID to
+	// own the inventory's store.
+	CreateInventory(ctx context.Context, userID string, dto dtos.CreateInventoryRequest) (*models.Inventory, error)
+	UpdateInventory(ctx context.Context, id, userID string, dto dtos.UpdateInventoryRequest) (*models.Inventory, error)
+	DeleteInventory(ctx context.Context, id, userID string) error
 	GetInventoryByID(ctx context.Context, id string) (*models.Inventory, error)
 	// ReserveStock takes quantity units of the product from one inventory
 	// record and returns that record's ID (needed to release the stock).
@@ -27,20 +32,42 @@ type IInventoryService interface {
 }
 
 type InventoryService struct {
-	repo      repositories.IInventoryRepository
-	validator *validation.Validator
+	repo        repositories.IInventoryRepository
+	productRepo productRepositories.IProductRepository
+	storeRepo   storeRepositories.IStoreRepository
+	validator   *validation.Validator
 }
 
-func NewInventoryService(repo repositories.IInventoryRepository, validator *validation.Validator) *InventoryService {
+func NewInventoryService(
+	repo repositories.IInventoryRepository,
+	productRepo productRepositories.IProductRepository,
+	storeRepo storeRepositories.IStoreRepository,
+	validator *validation.Validator,
+) *InventoryService {
 	return &InventoryService{
-		repo:      repo,
-		validator: validator,
+		repo:        repo,
+		productRepo: productRepo,
+		storeRepo:   storeRepo,
+		validator:   validator,
 	}
 }
 
-func (s *InventoryService) CreateInventory(ctx context.Context, dto dtos.CreateInventoryRequest) (*models.Inventory, error) {
+func (s *InventoryService) CreateInventory(ctx context.Context, userID string, dto dtos.CreateInventoryRequest) (*models.Inventory, error) {
 	if err := s.validator.ValidateStruct(dto); err != nil {
 		return nil, err
+	}
+	if err := storeServices.RequireStoreOwner(ctx, s.storeRepo, dto.StoreID.Hex(), userID); err != nil {
+		return nil, err
+	}
+	product, err := s.productRepo.GetProductByID(ctx, dto.ProductID.Hex())
+	if err != nil {
+		return nil, errors.Wrap(err, "fetching product")
+	}
+	if product == nil || product.DeletedAt != nil {
+		return nil, errors.NewNotFoundError("product", dto.ProductID.Hex())
+	}
+	if product.StoreID != dto.StoreID {
+		return nil, errors.NewBadRequestError("product does not belong to this store")
 	}
 	inventory, err := s.repo.CreateInventory(ctx, dto.ToInventory())
 	if err != nil {
@@ -49,12 +76,12 @@ func (s *InventoryService) CreateInventory(ctx context.Context, dto dtos.CreateI
 	return inventory, nil
 }
 
-func (s *InventoryService) UpdateInventory(ctx context.Context, id string, updateBody dtos.UpdateInventoryRequest) (*models.Inventory, error) {
+func (s *InventoryService) UpdateInventory(ctx context.Context, id, userID string, updateBody dtos.UpdateInventoryRequest) (*models.Inventory, error) {
 	if err := s.validator.ValidateStruct(updateBody); err != nil {
 		return nil, err
 	}
 
-	inventory, err := s.GetInventoryByID(ctx, id)
+	inventory, err := s.getOwnedInventory(ctx, id, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +97,10 @@ func (s *InventoryService) UpdateInventory(ctx context.Context, id string, updat
 	return inventory, nil
 }
 
-func (s *InventoryService) DeleteInventory(ctx context.Context, id string) error {
+func (s *InventoryService) DeleteInventory(ctx context.Context, id, userID string) error {
+	if _, err := s.getOwnedInventory(ctx, id, userID); err != nil {
+		return err
+	}
 	err := s.repo.DeleteInventory(ctx, id)
 	if stderrors.Is(err, mongo.ErrNoDocuments) {
 		return errors.NewNotFoundError("inventory", id)
@@ -88,6 +118,17 @@ func (s *InventoryService) GetInventoryByID(ctx context.Context, id string) (*mo
 	}
 	if inventory == nil || inventory.DeletedAt != nil {
 		return nil, errors.NewNotFoundError("inventory", id)
+	}
+	return inventory, nil
+}
+
+func (s *InventoryService) getOwnedInventory(ctx context.Context, id, userID string) (*models.Inventory, error) {
+	inventory, err := s.GetInventoryByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := storeServices.RequireStoreOwner(ctx, s.storeRepo, inventory.StoreID.Hex(), userID); err != nil {
+		return nil, err
 	}
 	return inventory, nil
 }

@@ -7,9 +7,16 @@ import (
 	dtos "github.com/devbenho/luka-platform/internal/orders/order_dtos"
 	"github.com/devbenho/luka-platform/internal/orders/services"
 	"github.com/devbenho/luka-platform/internal/utils"
+	middleware "github.com/devbenho/luka-platform/pkg/middlewares"
 	errors "github.com/devbenho/luka-platform/ports/http/errors"
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
+
+func authenticatedObjectID(c *gin.Context) (primitive.ObjectID, error) {
+	userID, _ := middleware.UserID(c)
+	return primitive.ObjectIDFromHex(userID)
+}
 
 type OrderHandler struct {
 	service services.IOrderService
@@ -33,11 +40,19 @@ func NewOrderHandler(service services.IOrderService) *OrderHandler {
 // @Security BearerAuth
 // @Router /orders [post]
 func (h *OrderHandler) Create(c *gin.Context) {
+	customerID, err := authenticatedObjectID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, utils.NewUnauthorizedResponse("User not authenticated"))
+		return
+	}
+
 	var createOrderRequest dtos.CreateOrderRequest
 	if err := c.ShouldBindJSON(&createOrderRequest); err != nil {
 		c.JSON(http.StatusBadRequest, utils.NewErrorResponse(http.StatusBadRequest, "Invalid input", err.Error()))
 		return
 	}
+	// Orders are always placed for the caller, whatever the body says.
+	createOrderRequest.CustomerID = customerID
 
 	result, err := h.service.CreateOrder(c.Request.Context(), createOrderRequest)
 	if err != nil {
@@ -70,8 +85,8 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 		return
 	}
 
-	err := h.service.UpdateOrderStatus(c.Request.Context(), id, status)
-	if err != nil {
+	userID, _ := middleware.UserID(c)
+	if err := h.service.UpdateOrderStatus(c.Request.Context(), id, userID, status); err != nil {
 		errors.Respond(c, err)
 		return
 	}
@@ -92,7 +107,8 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 // @Router /orders/{id} [get]
 func (h *OrderHandler) GetById(c *gin.Context) {
 	id := c.Param("id")
-	order, err := h.service.GetOrderByID(c.Request.Context(), id)
+	userID, _ := middleware.UserID(c)
+	order, err := h.service.GetOrderByID(c.Request.Context(), id, userID)
 	if err != nil {
 		errors.Respond(c, err)
 		return
@@ -103,17 +119,21 @@ func (h *OrderHandler) GetById(c *gin.Context) {
 }
 
 // @Summary List orders
-// @Description Get a list of orders, optionally filtered by customer ID
+// @Description List the authenticated user's orders
 // @Tags orders
 // @Produce json
-// @Param customer_id query string false "Filter orders by customer ID"
+// @Param customer_id query string false "Must be the caller's own ID if given"
 // @Success 200 {object} utils.Response
 // @Failure 500 {object} utils.Response
 // @Security BearerAuth
 // @Router /orders [get]
 func (h *OrderHandler) List(c *gin.Context) {
-	customerID := c.Query("customer_id")
-	orders, err := h.service.ListOrders(c.Request.Context(), customerID)
+	userID, _ := middleware.UserID(c)
+	if customerID := c.Query("customer_id"); customerID != "" && customerID != userID {
+		c.JSON(http.StatusForbidden, utils.NewForbiddenResponse("you can only list your own orders"))
+		return
+	}
+	orders, err := h.service.ListOrders(c.Request.Context(), userID)
 	if err != nil {
 		errors.Respond(c, err)
 		return
