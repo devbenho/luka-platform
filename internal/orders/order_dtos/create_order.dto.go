@@ -6,7 +6,9 @@ import (
 )
 
 type CreateOrderRequest struct {
-	CustomerID      primitive.ObjectID       `json:"customerID" validate:"required"`
+	// CustomerID is set by the server from the authenticated user; any value
+	// sent by the client is ignored.
+	CustomerID      primitive.ObjectID       `json:"customerID" validate:"required" swaggerignore:"true"`
 	Items           []CreateOrderItemRequest `json:"items" validate:"required,min=1,dive"`
 	ShippingAddress string                   `json:"shippingAddress" validate:"required"`
 	Notes           string                   `json:"notes"`

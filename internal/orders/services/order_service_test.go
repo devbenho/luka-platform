@@ -175,7 +175,57 @@ func newTestService(repo repositories.IOrderRepository, inv *fakeInventory, prod
 }
 
 func newTestServiceWithStores(repo repositories.IOrderRepository, inv *fakeInventory, products *fakeProducts, stores *fakeStores) *OrderService {
-	return NewOrderService(repo, inv, products, stores, validation.NewValidator())
+	return NewOrderService(repo, inv, products, stores, &fakeTx{inv: inv, repo: repo}, validation.NewValidator())
+}
+
+// fakeTx imitates a MongoDB transaction: if fn fails, the stock levels and
+// order state it changed are restored, as an aborted transaction would.
+type fakeTx struct {
+	inv     *fakeInventory
+	repo    repositories.IOrderRepository
+	runs    int
+	aborted int
+}
+
+func (f *fakeTx) RunInTransaction(ctx context.Context, fn func(ctx context.Context) error) error {
+	f.runs++
+	stock := map[string]int{}
+	for k, v := range f.inv.stock {
+		stock[k] = v
+	}
+	orders := f.orderRepo()
+	var created *models.Order
+	statuses := map[string]models.OrderStatus{}
+	if orders != nil {
+		created = orders.created
+		for id, o := range orders.orders {
+			statuses[id] = o.Status
+		}
+	}
+
+	err := fn(ctx)
+	if err != nil {
+		f.aborted++
+		f.inv.stock = stock
+		if orders != nil {
+			orders.created = created
+			for id, status := range statuses {
+				orders.orders[id].Status = status
+			}
+			orders.updated = nil
+		}
+	}
+	return err
+}
+
+func (f *fakeTx) orderRepo() *fakeOrderRepo {
+	switch r := f.repo.(type) {
+	case *fakeOrderRepo:
+		return r
+	case *stalePendingRepo:
+		return r.fakeOrderRepo
+	}
+	return nil
 }
 
 // marketplace is one seller's store with one product, and one customer.
@@ -313,48 +363,28 @@ func TestCreateOrder(t *testing.T) {
 	}
 }
 
-func TestCreateOrder_ReleasesReservedStockWhenSavingFails(t *testing.T) {
+func TestCreateOrder_SaveFailureAbortsTheTransaction(t *testing.T) {
 	product := primitive.NewObjectID()
-	repo := &fakeOrderRepo{createErr: stderrors.New("db down")}
+	saveErr := stderrors.New("db down")
+	repo := &fakeOrderRepo{createErr: saveErr}
 	inv := newFakeInventory(map[string]int{product.Hex(): 5})
 	products := &fakeProducts{prices: map[string]float64{product.Hex(): 10}}
+	tx := &fakeTx{inv: inv, repo: repo}
+	svc := NewOrderService(repo, inv, products, &fakeStores{}, tx, validation.NewValidator())
 
-	_, err := newTestService(repo, inv, products).
-		CreateOrder(context.Background(), orderRequest(dtos.CreateOrderItemRequest{ProductID: product, Quantity: 2}))
+	_, err := svc.CreateOrder(context.Background(), orderRequest(dtos.CreateOrderItemRequest{ProductID: product, Quantity: 2}))
 
-	if err == nil {
-		t.Fatal("expected error when the repository fails")
+	if !stderrors.Is(err, saveErr) {
+		t.Fatalf("error = %v, want it to wrap the save failure", err)
 	}
-	wantReserves := []stockMove{{id: product.Hex(), quantity: 2}}
-	wantReleases := []stockMove{{id: inv.inventoryOf[product.Hex()].Hex(), quantity: 2}}
-	if !equalMoves(inv.reserves, wantReserves) {
-		t.Errorf("reserves = %+v, want %+v", inv.reserves, wantReserves)
+	if want := []stockMove{{id: product.Hex(), quantity: 2}}; !equalMoves(inv.reserves, want) {
+		t.Errorf("reserves = %+v, want %+v", inv.reserves, want)
 	}
-	if !equalMoves(inv.releases, wantReleases) {
-		t.Errorf("releases = %+v, want %+v (must target the reserved inventory record)", inv.releases, wantReleases)
+	if tx.runs != 1 || tx.aborted != 1 {
+		t.Errorf("transaction runs/aborts = %d/%d, want the reservation and save in one aborted transaction", tx.runs, tx.aborted)
 	}
 	if got := inv.stock[product.Hex()]; got != 5 {
-		t.Errorf("stock after rollback = %d, want 5", got)
-	}
-}
-
-func TestCreateOrder_SurfacesRollbackFailure(t *testing.T) {
-	product := primitive.NewObjectID()
-	createErr := stderrors.New("db down")
-	releaseErr := stderrors.New("inventory unavailable")
-	repo := &fakeOrderRepo{createErr: createErr}
-	inv := newFakeInventory(map[string]int{product.Hex(): 5})
-	inv.releaseErr = releaseErr
-	products := &fakeProducts{prices: map[string]float64{product.Hex(): 10}}
-
-	_, err := newTestService(repo, inv, products).
-		CreateOrder(context.Background(), orderRequest(dtos.CreateOrderItemRequest{ProductID: product, Quantity: 2}))
-
-	if !stderrors.Is(err, releaseErr) {
-		t.Errorf("error does not carry the rollback failure: %v", err)
-	}
-	if !stderrors.Is(err, createErr) {
-		t.Errorf("error does not carry the original create failure: %v", err)
+		t.Errorf("stock after abort = %d, want 5", got)
 	}
 }
 
@@ -520,6 +550,25 @@ func TestUpdateOrderStatus_ConcurrentChangeIsRejected(t *testing.T) {
 	}
 	if len(inv.releases) != 0 {
 		t.Errorf("stock released despite the conflict: %+v", inv.releases)
+	}
+}
+
+func TestUpdateOrderStatus_CancelIsUndoneWhenStockCannotBeReleased(t *testing.T) {
+	m := newMarketplace()
+	inv := newFakeInventory(map[string]int{m.product.Hex(): 3})
+	inv.releaseErr = stderrors.New("inventory unavailable")
+	order := m.order(models.OrderStatusPending)
+	order.Items[0].InventoryID = inv.inventoryOf[m.product.Hex()]
+	orderID := primitive.NewObjectID().Hex()
+	repo := &fakeOrderRepo{orders: map[string]*models.Order{orderID: order}}
+
+	err := newTestServiceWithStores(repo, inv, m.products, m.stores).UpdateOrderStatus(context.Background(), orderID, m.customer, models.OrderStatusCancelled)
+
+	if !stderrors.Is(err, inv.releaseErr) {
+		t.Fatalf("error = %v, want the release failure", err)
+	}
+	if got := repo.orders[orderID].Status; got != models.OrderStatusPending {
+		t.Errorf("status after failed cancel = %q, want it unchanged (%q)", got, models.OrderStatusPending)
 	}
 }
 

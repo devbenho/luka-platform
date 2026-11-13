@@ -3,6 +3,8 @@ package repositories
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // IUserRepository defines the methods that any repository implementation must have.
@@ -23,6 +26,31 @@ type IUserRepository interface {
 	DeleteUser(ctx context.Context, id string) error
 	GetUserByEmail(ctx context.Context, email string) (*models.User, error)
 	GetUserByUsername(ctx context.Context, username string) (*models.User, error)
+}
+
+// EnsureIndexes creates unique indexes on email and username so two
+// simultaneous registrations cannot create duplicate accounts. It fails if
+// the collection already holds duplicates, which must be cleaned up first.
+func EnsureIndexes(ctx context.Context, db database.IDatabase) error {
+	ctx, cancel := context.WithTimeout(ctx, database.DatabaseTimeout)
+	defer cancel()
+	_, err := db.GetDB().Collection("users").Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "email", Value: 1}}, Options: options.Index().SetUnique(true).SetName("unique_email")},
+		{Keys: bson.D{{Key: "username", Value: 1}}, Options: options.Index().SetUnique(true).SetName("unique_username")},
+	})
+	if err != nil {
+		return fmt.Errorf("creating unique user indexes: %w", err)
+	}
+	return nil
+}
+
+// errUserExists maps a unique-index violation to the API's "already exists"
+// error.
+func errUserExists(err error) error {
+	if mongo.IsDuplicateKeyError(err) {
+		return apperrors.NewError(apperrors.UserAlreadyExists, http.StatusBadRequest, "username or email already taken")
+	}
+	return err
 }
 
 type userRepository struct {
@@ -45,7 +73,7 @@ func (r *userRepository) CreateUser(ctx context.Context, user *models.User) erro
 	user.CreatedAt = time.Now()
 	user.UpdatedAt = time.Now()
 
-	return r.db.Create(ctx, "users", user)
+	return errUserExists(r.db.Create(ctx, "users", user))
 }
 
 // GetUserByID fetches a user by their ID from the database
@@ -90,7 +118,7 @@ func (r *userRepository) UpdateUser(ctx context.Context, id string, user *models
 		},
 	}
 
-	return r.db.Update(ctx, "users", filter, update)
+	return errUserExists(r.db.Update(ctx, "users", filter, update))
 }
 
 // DeleteUser deletes a user by their ID from the database
