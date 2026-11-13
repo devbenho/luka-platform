@@ -379,3 +379,60 @@ func TestInventoryUpdateAndDelete(t *testing.T) {
 	api.expect(api.do(http.MethodDelete, "/inventories/"+inventoryID, seller.Token, nil), http.StatusNotFound, "delete inventory twice")
 	api.expect(api.do(http.MethodGet, "/inventories/"+inventoryID, seller.Token, nil), http.StatusNotFound, "get deleted inventory")
 }
+
+func TestAccessControl(t *testing.T) {
+	api := newAPI(t)
+	seller := api.register("seller", "seller")
+	rival := api.register("rival", "seller")
+	buyer := api.register("buyer", "buyer")
+	stranger := api.register("stranger", "buyer")
+
+	storeID := createStore(t, api, seller, "Seller Store")
+	rivalStoreID := createStore(t, api, rival, "Rival Store")
+	product := createProduct(t, api, seller, storeID, 10)
+	rivalProduct := createProduct(t, api, rival, rivalStoreID, 5)
+	inventoryID := createInventory(t, api, seller, storeID, product, 5)
+
+	// Products and inventory can only be changed by the store owner.
+	api.expect(api.do(http.MethodPost, "/products/", rival.Token, map[string]interface{}{
+		"name": "Planted", "description": "x", "price": 1, "store_id": storeID,
+		"categories": []string{}, "images": []string{"x"},
+	}), http.StatusForbidden, "create product in another seller's store")
+	api.expect(api.do(http.MethodPatch, "/products/"+product, rival.Token, map[string]interface{}{"price": 0.01}), http.StatusForbidden, "update another seller's product")
+	api.expect(api.do(http.MethodDelete, "/products/"+product, rival.Token, nil), http.StatusForbidden, "delete another seller's product")
+	api.expect(api.do(http.MethodPost, "/inventories/", rival.Token, map[string]interface{}{
+		"product_id": product, "warehouse_id": primitive.NewObjectID().Hex(), "store_id": storeID,
+		"quantity": 1000, "min_quantity": 1, "max_quantity": 2000,
+	}), http.StatusForbidden, "create inventory in another seller's store")
+	api.expect(api.do(http.MethodPost, "/inventories/", seller.Token, map[string]interface{}{
+		"product_id": rivalProduct, "warehouse_id": primitive.NewObjectID().Hex(), "store_id": storeID,
+		"quantity": 1, "min_quantity": 1, "max_quantity": 2,
+	}), http.StatusBadRequest, "create inventory for a product from another store")
+	api.expect(api.do(http.MethodPatch, "/inventories/"+inventoryID, rival.Token, map[string]int{"quantity": 0}), http.StatusForbidden, "update another seller's inventory")
+	api.expect(api.do(http.MethodDelete, "/inventories/"+inventoryID, rival.Token, nil), http.StatusForbidden, "delete another seller's inventory")
+
+	// Orders are always placed for the caller.
+	resp := api.expect(api.do(http.MethodPost, "/orders/", buyer.Token, map[string]interface{}{
+		"customerID":      stranger.ID,
+		"items":           []map[string]interface{}{{"productID": product, "quantity": 1}},
+		"shippingAddress": "1 Test Street",
+	}), http.StatusCreated, "place order naming another customer")
+	orderID := resp.data()["id"].(string)
+	if got := resp.data()["customer_id"]; got != buyer.ID {
+		t.Errorf("order customer = %v, want the caller %s", got, buyer.ID)
+	}
+
+	api.expect(api.do(http.MethodGet, "/orders/"+orderID, buyer.Token, nil), http.StatusOK, "customer reads own order")
+	api.expect(api.do(http.MethodGet, "/orders/"+orderID, seller.Token, nil), http.StatusOK, "seller reads order for their product")
+	api.expect(api.do(http.MethodGet, "/orders/"+orderID, stranger.Token, nil), http.StatusForbidden, "stranger reads order")
+	api.expect(api.do(http.MethodGet, "/orders/?customer_id="+buyer.ID, stranger.Token, nil), http.StatusForbidden, "list another customer's orders")
+	if orders := api.expect(api.do(http.MethodGet, "/orders/", stranger.Token, nil), http.StatusOK, "list own orders").Body["data"].([]interface{}); len(orders) != 0 {
+		t.Errorf("stranger sees %d orders, want 0", len(orders))
+	}
+
+	api.expect(api.do(http.MethodPatch, "/orders/"+orderID+"/status", buyer.Token, "PROCESSING"), http.StatusForbidden, "customer advances order")
+	api.expect(api.do(http.MethodPatch, "/orders/"+orderID+"/status", stranger.Token, "CANCELLED"), http.StatusForbidden, "stranger cancels order")
+	api.expect(api.do(http.MethodPatch, "/orders/"+orderID+"/status", rival.Token, "PROCESSING"), http.StatusForbidden, "other seller advances order")
+	api.expect(api.do(http.MethodPatch, "/orders/"+orderID+"/status", seller.Token, "PROCESSING"), http.StatusOK, "seller advances order")
+	api.expect(api.do(http.MethodPatch, "/orders/"+orderID+"/status", seller.Token, "SHIPPED"), http.StatusOK, "seller ships order")
+}

@@ -22,9 +22,9 @@ func Routes(r *gin.RouterGroup, mongoDb database.IDatabase, validator *validatio
 	productRepository := productRepo.NewProductRepository(mongoDb)
 	storeRepository := storeRepo.NewStoreRepository(mongoDb)
 	// Initialize services
-	inventoryService := services.NewInventoryService(inventoryRepository, validator)
+	inventoryService := services.NewInventoryService(inventoryRepository, productRepository, storeRepository, validator)
 	productService := productSvc.NewProductService(productRepository, storeRepository, validator)
-	orderService := orderSvc.NewOrderService(orderRepository, inventoryService, productService, validator)
+	orderService := orderSvc.NewOrderService(orderRepository, inventoryService, productService, storeRepository, validator)
 
 	// Initialize handler
 	orderHandler := NewOrderHandler(orderService)

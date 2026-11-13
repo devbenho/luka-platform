@@ -12,6 +12,7 @@ import (
 	"github.com/devbenho/luka-platform/internal/orders/repositories"
 	productDTOs "github.com/devbenho/luka-platform/internal/product/dtos"
 	productModels "github.com/devbenho/luka-platform/internal/product/models"
+	storeModels "github.com/devbenho/luka-platform/internal/store/models"
 	apperrors "github.com/devbenho/luka-platform/pkg/errors"
 	"github.com/devbenho/luka-platform/pkg/validation"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -85,15 +86,15 @@ func newFakeInventory(stock map[string]int) *fakeInventory {
 	return f
 }
 
-func (f *fakeInventory) CreateInventory(context.Context, inventoryDTOs.CreateInventoryRequest) (*inventoryModels.Inventory, error) {
+func (f *fakeInventory) CreateInventory(context.Context, string, inventoryDTOs.CreateInventoryRequest) (*inventoryModels.Inventory, error) {
 	return nil, nil
 }
 
-func (f *fakeInventory) UpdateInventory(context.Context, string, inventoryDTOs.UpdateInventoryRequest) (*inventoryModels.Inventory, error) {
+func (f *fakeInventory) UpdateInventory(context.Context, string, string, inventoryDTOs.UpdateInventoryRequest) (*inventoryModels.Inventory, error) {
 	return nil, nil
 }
 
-func (f *fakeInventory) DeleteInventory(context.Context, string) error { return nil }
+func (f *fakeInventory) DeleteInventory(context.Context, string, string) error { return nil }
 
 func (f *fakeInventory) GetInventoryByID(context.Context, string) (*inventoryModels.Inventory, error) {
 	return nil, nil
@@ -124,10 +125,11 @@ func (f *fakeInventory) ReleaseStock(_ context.Context, inventoryID primitive.Ob
 }
 
 type fakeProducts struct {
-	prices map[string]float64
+	prices  map[string]float64
+	storeOf map[string]primitive.ObjectID // product hex -> store ID
 }
 
-func (f *fakeProducts) CreateProduct(context.Context, *productDTOs.CreateProductRequest) (*productDTOs.CreateProductResponse, error) {
+func (f *fakeProducts) CreateProduct(context.Context, string, *productDTOs.CreateProductRequest) (*productDTOs.CreateProductResponse, error) {
 	return nil, nil
 }
 
@@ -136,19 +138,76 @@ func (f *fakeProducts) GetProductByID(_ context.Context, id string) (*productMod
 	if !ok {
 		return nil, apperrors.NewNotFoundError("product", id)
 	}
-	return &productModels.Product{Price: price}, nil
+	return &productModels.Product{Price: price, StoreID: f.storeOf[id]}, nil
 }
 
-func (f *fakeProducts) UpdateProduct(context.Context, string, *productDTOs.UpdateProductRequest) (*productModels.Product, error) {
+func (f *fakeProducts) UpdateProduct(context.Context, string, string, *productDTOs.UpdateProductRequest) (*productModels.Product, error) {
 	return nil, nil
 }
 
-func (f *fakeProducts) DeleteProduct(context.Context, string) error { return nil }
+func (f *fakeProducts) DeleteProduct(context.Context, string, string) error { return nil }
+
+// fakeStores maps store hex IDs to their owner.
+type fakeStores struct {
+	owners map[string]primitive.ObjectID
+}
+
+func (f *fakeStores) CreateStore(context.Context, *storeModels.Store) (*storeModels.Store, error) {
+	return nil, nil
+}
+
+func (f *fakeStores) GetStoreByID(_ context.Context, id string) (*storeModels.Store, error) {
+	owner, ok := f.owners[id]
+	if !ok {
+		return nil, nil
+	}
+	return &storeModels.Store{OwnerId: owner}, nil
+}
+
+func (f *fakeStores) UpdateStore(context.Context, string, *storeModels.Store) error { return nil }
+
+func (f *fakeStores) DeleteStore(context.Context, string) error { return nil }
 
 // --- helpers -------------------------------------------------------------
 
 func newTestService(repo repositories.IOrderRepository, inv *fakeInventory, products *fakeProducts) *OrderService {
-	return NewOrderService(repo, inv, products, validation.NewValidator())
+	return newTestServiceWithStores(repo, inv, products, &fakeStores{})
+}
+
+func newTestServiceWithStores(repo repositories.IOrderRepository, inv *fakeInventory, products *fakeProducts, stores *fakeStores) *OrderService {
+	return NewOrderService(repo, inv, products, stores, validation.NewValidator())
+}
+
+// marketplace is one seller's store with one product, and one customer.
+type marketplace struct {
+	seller, customer, stranger string
+	product                    primitive.ObjectID
+	products                   *fakeProducts
+	stores                     *fakeStores
+}
+
+func newMarketplace() marketplace {
+	seller, store, product := primitive.NewObjectID(), primitive.NewObjectID(), primitive.NewObjectID()
+	return marketplace{
+		seller:   seller.Hex(),
+		customer: primitive.NewObjectID().Hex(),
+		stranger: primitive.NewObjectID().Hex(),
+		product:  product,
+		products: &fakeProducts{
+			prices:  map[string]float64{product.Hex(): 10},
+			storeOf: map[string]primitive.ObjectID{product.Hex(): store},
+		},
+		stores: &fakeStores{owners: map[string]primitive.ObjectID{store.Hex(): seller}},
+	}
+}
+
+func (m marketplace) order(status models.OrderStatus) *models.Order {
+	customer, _ := primitive.ObjectIDFromHex(m.customer)
+	return &models.Order{
+		CustomerID: customer,
+		Status:     status,
+		Items:      []models.OrderItem{{ProductID: m.product, Quantity: 1}},
+	}
 }
 
 func orderRequest(items ...dtos.CreateOrderItemRequest) dtos.CreateOrderRequest {
@@ -341,25 +400,33 @@ func TestIsValidStatusTransition(t *testing.T) {
 }
 
 func TestUpdateOrderStatus(t *testing.T) {
+	m := newMarketplace()
 	orderID := primitive.NewObjectID().Hex()
 
 	tests := []struct {
 		name        string
+		actor       string
 		current     models.OrderStatus
 		next        models.OrderStatus
 		wantErrType apperrors.ErrorType
 	}{
-		{name: "allowed transition is persisted", current: models.OrderStatusPending, next: models.OrderStatusProcessing},
-		{name: "disallowed transition is rejected", current: models.OrderStatusDelivered, next: models.OrderStatusPending, wantErrType: apperrors.BadRequestType},
-		{name: "unknown status is rejected", current: models.OrderStatusPending, next: "LOST", wantErrType: apperrors.BadRequestType},
+		{name: "seller advances the order", actor: m.seller, current: models.OrderStatusPending, next: models.OrderStatusProcessing},
+		{name: "seller ships the order", actor: m.seller, current: models.OrderStatusProcessing, next: models.OrderStatusShipped},
+		{name: "seller cancels the order", actor: m.seller, current: models.OrderStatusPending, next: models.OrderStatusCancelled},
+		{name: "customer cancels own order", actor: m.customer, current: models.OrderStatusPending, next: models.OrderStatusCancelled},
+		{name: "customer cannot ship", actor: m.customer, current: models.OrderStatusProcessing, next: models.OrderStatusShipped, wantErrType: apperrors.ForbiddenType},
+		{name: "stranger cannot cancel", actor: m.stranger, current: models.OrderStatusPending, next: models.OrderStatusCancelled, wantErrType: apperrors.ForbiddenType},
+		{name: "disallowed transition is rejected", actor: m.seller, current: models.OrderStatusDelivered, next: models.OrderStatusPending, wantErrType: apperrors.BadRequestType},
+		{name: "customer cannot cancel a shipped order", actor: m.customer, current: models.OrderStatusShipped, next: models.OrderStatusCancelled, wantErrType: apperrors.BadRequestType},
+		{name: "unknown status is rejected", actor: m.seller, current: models.OrderStatusPending, next: "LOST", wantErrType: apperrors.BadRequestType},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := &fakeOrderRepo{orders: map[string]*models.Order{orderID: {Status: tt.current}}}
-			svc := newTestService(repo, newFakeInventory(nil), &fakeProducts{})
+			repo := &fakeOrderRepo{orders: map[string]*models.Order{orderID: m.order(tt.current)}}
+			svc := newTestServiceWithStores(repo, newFakeInventory(nil), m.products, m.stores)
 
-			err := svc.UpdateOrderStatus(context.Background(), orderID, tt.next)
+			err := svc.UpdateOrderStatus(context.Background(), orderID, tt.actor, tt.next)
 
 			if tt.wantErrType != "" {
 				if got := errorType(err); got != tt.wantErrType {
@@ -380,17 +447,51 @@ func TestUpdateOrderStatus(t *testing.T) {
 	}
 }
 
-func TestUpdateOrderStatus_CancelReleasesStock(t *testing.T) {
-	product := primitive.NewObjectID()
-	inv := newFakeInventory(map[string]int{product.Hex(): 3})
-	inventoryID := inv.inventoryOf[product.Hex()]
+func TestGetOrderByID_Access(t *testing.T) {
+	m := newMarketplace()
 	orderID := primitive.NewObjectID().Hex()
-	repo := &fakeOrderRepo{orders: map[string]*models.Order{orderID: {
-		Status: models.OrderStatusPending,
-		Items:  []models.OrderItem{{ProductID: product, Quantity: 2, InventoryID: inventoryID}},
-	}}}
 
-	err := newTestService(repo, inv, &fakeProducts{}).UpdateOrderStatus(context.Background(), orderID, models.OrderStatusCancelled)
+	tests := []struct {
+		name        string
+		actor       string
+		wantErrType apperrors.ErrorType
+	}{
+		{name: "customer sees own order", actor: m.customer},
+		{name: "seller sees order for their products", actor: m.seller},
+		{name: "stranger is forbidden", actor: m.stranger, wantErrType: apperrors.ForbiddenType},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &fakeOrderRepo{orders: map[string]*models.Order{orderID: m.order(models.OrderStatusPending)}}
+			svc := newTestServiceWithStores(repo, newFakeInventory(nil), m.products, m.stores)
+
+			order, err := svc.GetOrderByID(context.Background(), orderID, tt.actor)
+
+			if tt.wantErrType != "" {
+				if got := errorType(err); got != tt.wantErrType {
+					t.Fatalf("error type = %q, want %q (err: %v)", got, tt.wantErrType, err)
+				}
+				return
+			}
+			if err != nil || order == nil {
+				t.Fatalf("expected the order, got %v / %v", order, err)
+			}
+		})
+	}
+}
+
+func TestUpdateOrderStatus_CancelReleasesStock(t *testing.T) {
+	m := newMarketplace()
+	inv := newFakeInventory(map[string]int{m.product.Hex(): 3})
+	inventoryID := inv.inventoryOf[m.product.Hex()]
+	order := m.order(models.OrderStatusPending)
+	order.Items[0].Quantity = 2
+	order.Items[0].InventoryID = inventoryID
+	orderID := primitive.NewObjectID().Hex()
+	repo := &fakeOrderRepo{orders: map[string]*models.Order{orderID: order}}
+
+	err := newTestServiceWithStores(repo, inv, m.products, m.stores).UpdateOrderStatus(context.Background(), orderID, m.customer, models.OrderStatusCancelled)
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -398,7 +499,7 @@ func TestUpdateOrderStatus_CancelReleasesStock(t *testing.T) {
 	if want := []stockMove{{id: inventoryID.Hex(), quantity: 2}}; !equalMoves(inv.releases, want) {
 		t.Errorf("releases = %+v, want %+v", inv.releases, want)
 	}
-	if got := inv.stock[product.Hex()]; got != 5 {
+	if got := inv.stock[m.product.Hex()]; got != 5 {
 		t.Errorf("stock after cancel = %d, want 5", got)
 	}
 }
@@ -407,11 +508,12 @@ func TestUpdateOrderStatus_ConcurrentChangeIsRejected(t *testing.T) {
 	// The request read the order while it was PENDING, but another request
 	// has since moved it to PROCESSING. The guarded write must fail rather
 	// than cancel the order (and release its stock) a second time.
+	m := newMarketplace()
 	orderID := primitive.NewObjectID().Hex()
-	repo := &stalePendingRepo{&fakeOrderRepo{orders: map[string]*models.Order{orderID: {Status: models.OrderStatusProcessing}}}}
+	repo := &stalePendingRepo{&fakeOrderRepo{orders: map[string]*models.Order{orderID: m.order(models.OrderStatusProcessing)}}, m.order(models.OrderStatusPending)}
 	inv := newFakeInventory(map[string]int{})
 
-	err := newTestService(repo, inv, &fakeProducts{}).UpdateOrderStatus(context.Background(), orderID, models.OrderStatusCancelled)
+	err := newTestServiceWithStores(repo, inv, m.products, m.stores).UpdateOrderStatus(context.Background(), orderID, m.customer, models.OrderStatusCancelled)
 
 	if got := errorType(err); got != apperrors.ConflictType {
 		t.Fatalf("error type = %q, want %q (err: %v)", got, apperrors.ConflictType, err)
@@ -421,18 +523,21 @@ func TestUpdateOrderStatus_ConcurrentChangeIsRejected(t *testing.T) {
 	}
 }
 
-// stalePendingRepo returns a PENDING snapshot while the stored order has
+// stalePendingRepo returns an out-of-date snapshot while the stored order has
 // already moved on, simulating a request that lost a race.
-type stalePendingRepo struct{ *fakeOrderRepo }
+type stalePendingRepo struct {
+	*fakeOrderRepo
+	snapshot *models.Order
+}
 
 func (r *stalePendingRepo) GetOrderByID(context.Context, string) (*models.Order, error) {
-	return &models.Order{Status: models.OrderStatusPending}, nil
+	return r.snapshot, nil
 }
 
 func TestUpdateOrderStatus_OrderNotFound(t *testing.T) {
 	svc := newTestService(&fakeOrderRepo{}, newFakeInventory(nil), &fakeProducts{})
 
-	err := svc.UpdateOrderStatus(context.Background(), primitive.NewObjectID().Hex(), models.OrderStatusProcessing)
+	err := svc.UpdateOrderStatus(context.Background(), primitive.NewObjectID().Hex(), primitive.NewObjectID().Hex(), models.OrderStatusProcessing)
 
 	if got := errorType(err); got != apperrors.NotFoundErrorType {
 		t.Fatalf("error type = %q, want %q (err: %v)", got, apperrors.NotFoundErrorType, err)

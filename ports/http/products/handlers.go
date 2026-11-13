@@ -6,6 +6,7 @@ import (
 	"github.com/devbenho/luka-platform/internal/product/dtos"
 	"github.com/devbenho/luka-platform/internal/product/services"
 	"github.com/devbenho/luka-platform/internal/utils"
+	middleware "github.com/devbenho/luka-platform/pkg/middlewares"
 	errors "github.com/devbenho/luka-platform/ports/http/errors"
 	"github.com/gin-gonic/gin"
 )
@@ -32,13 +33,14 @@ func NewProductHandler(service services.IProductService) *ProductHandler {
 // @Security BearerAuth
 // @Router /products [post]
 func (h *ProductHandler) Create(c *gin.Context) {
+	userID, _ := middleware.UserID(c)
 	var req dtos.CreateProductRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, utils.NewErrorResponse(http.StatusBadRequest, "Invalid request body", err.Error()))
 		return
 	}
 
-	product, err := h.service.CreateProduct(c.Request.Context(), &req)
+	product, err := h.service.CreateProduct(c.Request.Context(), userID, &req)
 	if err != nil {
 		errors.Respond(c, err)
 		return
@@ -62,13 +64,14 @@ func (h *ProductHandler) Create(c *gin.Context) {
 // @Router /products/{id} [patch]
 func (h *ProductHandler) Update(c *gin.Context) {
 	id := c.Param("id")
+	userID, _ := middleware.UserID(c)
 	var req dtos.UpdateProductRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, utils.NewErrorResponse(http.StatusBadRequest, "Invalid request body", err.Error()))
 		return
 	}
 
-	product, err := h.service.UpdateProduct(c.Request.Context(), id, &req)
+	product, err := h.service.UpdateProduct(c.Request.Context(), id, userID, &req)
 	if err != nil {
 		errors.Respond(c, err)
 		return
@@ -110,7 +113,8 @@ func (h *ProductHandler) GetById(c *gin.Context) {
 // @Router /products/{id} [delete]
 func (h *ProductHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
-	err := h.service.DeleteProduct(c.Request.Context(), id)
+	userID, _ := middleware.UserID(c)
+	err := h.service.DeleteProduct(c.Request.Context(), id, userID)
 	if err != nil {
 		errors.Respond(c, err)
 		return
