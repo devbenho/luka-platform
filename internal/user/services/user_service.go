@@ -81,7 +81,10 @@ func (s *UserService) Register(ctx context.Context, dto *dtos.CreateUserRequest)
 		"Username": user.Username,
 	}
 
-	token := tokens.GenerateAccessToken(payload)
+	token, err := tokens.GenerateAccessToken(payload)
+	if err != nil {
+		return nil, errors.NewInternalError("generating access token", err)
+	}
 
 	return &dtos.CreateUserResponse{
 		ID:    user.ID.Hex(),
@@ -108,7 +111,10 @@ func (s *UserService) Login(ctx context.Context, dto *dtos.AuthDTO) (*dtos.AuthR
 		"Role":  existUser.Role,
 	}
 
-	token := tokens.GenerateAccessToken(payload)
+	token, err := tokens.GenerateAccessToken(payload)
+	if err != nil {
+		return nil, errors.NewInternalError("generating access token", err)
+	}
 
 	return &dtos.AuthResponseDTO{
 		Email: existUser.Email,

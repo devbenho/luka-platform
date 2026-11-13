@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"log"
 	"net/http"
 
 	config "github.com/devbenho/luka-platform/configs"
@@ -22,7 +21,6 @@ func JWT(tokenType string) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		log.Print(token)
 		payload, err := tokens.ValidateToken(token)
 
 		if err != nil {

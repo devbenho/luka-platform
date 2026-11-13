@@ -48,7 +48,6 @@ func LoadConfig() (*Config, error) {
 		return &config, fmt.Errorf("missing required environment variables")
 	}
 
-	log.Printf("Config loaded: %+v", config)
 	return &config, nil
 }
 

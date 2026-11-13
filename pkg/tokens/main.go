@@ -1,7 +1,7 @@
 package tokens
 
 import (
-	"log"
+	"fmt"
 	"strings"
 	"time"
 
@@ -28,7 +28,9 @@ func NewTokenService(secret string) *TokenService {
 		secret: secret,
 	}
 }
-func GenerateAccessToken(payload map[string]interface{}) string {
+
+// GenerateAccessToken signs a 24h access token for the given payload.
+func GenerateAccessToken(payload map[string]interface{}) (string, error) {
 	cfg := config.GetConfig()
 	payload["type"] = "access"
 	tokenContent := jwt.MapClaims{
@@ -38,11 +40,10 @@ func GenerateAccessToken(payload map[string]interface{}) string {
 	jwtToken := jwt.NewWithClaims(jwt.GetSigningMethod("HS256"), tokenContent)
 	token, err := jwtToken.SignedString([]byte(cfg.JWT.Secret))
 	if err != nil {
-		log.Fatal("Failed to generate access token: ", err)
-		return ""
+		return "", fmt.Errorf("signing access token: %w", err)
 	}
 
-	return token
+	return token, nil
 }
 
 func ValidateToken(jwtToken string) (map[string]interface{}, error) {
