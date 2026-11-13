@@ -1,11 +1,13 @@
 package http
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 
 	config "github.com/devbenho/luka-platform/configs"
+	userRepositories "github.com/devbenho/luka-platform/internal/user/repositories"
 	"github.com/devbenho/luka-platform/internal/utils"
 	"github.com/devbenho/luka-platform/pkg/database"
 	"github.com/devbenho/luka-platform/pkg/validation"
@@ -75,6 +77,10 @@ func (s Server) GetEngine() *gin.Engine {
 }
 
 func (s Server) MapRoutes() error {
+	if err := userRepositories.EnsureIndexes(context.Background(), s.db); err != nil {
+		return err
+	}
+
 	v1 := s.engine.Group("/api/v1")
 	users.Routes(v1, s.db, s.validator, *s.cfg)
 	stores.Routes(v1, s.db, s.validator, *s.cfg)

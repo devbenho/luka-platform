@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/devbenho/luka-platform/pkg/database"
@@ -435,4 +436,40 @@ func TestAccessControl(t *testing.T) {
 	api.expect(api.do(http.MethodPatch, "/orders/"+orderID+"/status", rival.Token, "PROCESSING"), http.StatusForbidden, "other seller advances order")
 	api.expect(api.do(http.MethodPatch, "/orders/"+orderID+"/status", seller.Token, "PROCESSING"), http.StatusOK, "seller advances order")
 	api.expect(api.do(http.MethodPatch, "/orders/"+orderID+"/status", seller.Token, "SHIPPED"), http.StatusOK, "seller ships order")
+}
+
+func TestConcurrentDuplicateRegistrationCreatesOneAccount(t *testing.T) {
+	api := newAPI(t)
+	const attempts = 8
+	statuses := make(chan int, attempts)
+	var wg sync.WaitGroup
+	for i := 0; i < attempts; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			resp := api.do(http.MethodPost, "/auth/register", "", map[string]string{
+				"username": "racer",
+				"email":    fmt.Sprintf("racer%d@example.com", i),
+				"password": "s3cret-pass",
+				"role":     "buyer",
+			})
+			statuses <- resp.Status
+		}(i)
+	}
+	wg.Wait()
+	close(statuses)
+
+	created := 0
+	for status := range statuses {
+		switch status {
+		case http.StatusCreated:
+			created++
+		case http.StatusBadRequest:
+		default:
+			t.Errorf("unexpected status %d", status)
+		}
+	}
+	if created != 1 {
+		t.Errorf("%d accounts created for one username, want exactly 1", created)
+	}
 }
