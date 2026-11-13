@@ -9,11 +9,13 @@ import (
 	inventoryModels "github.com/devbenho/luka-platform/internal/inventory/models"
 	"github.com/devbenho/luka-platform/internal/orders/models"
 	dtos "github.com/devbenho/luka-platform/internal/orders/order_dtos"
+	"github.com/devbenho/luka-platform/internal/orders/repositories"
 	productDTOs "github.com/devbenho/luka-platform/internal/product/dtos"
 	productModels "github.com/devbenho/luka-platform/internal/product/models"
 	apperrors "github.com/devbenho/luka-platform/pkg/errors"
 	"github.com/devbenho/luka-platform/pkg/validation"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // --- fakes ---------------------------------------------------------------
@@ -35,10 +37,19 @@ func (r *fakeOrderRepo) CreateOrder(_ context.Context, order *models.Order) (*mo
 }
 
 func (r *fakeOrderRepo) UpdateOrder(_ context.Context, id string, order *models.Order) error {
+	return r.UpdateOrderStatus(context.Background(), id, r.orders[id].Status, order.Status)
+}
+
+func (r *fakeOrderRepo) UpdateOrderStatus(_ context.Context, id string, from, to models.OrderStatus) error {
+	order, ok := r.orders[id]
+	if !ok || order.Status != from {
+		return mongo.ErrNoDocuments
+	}
 	if r.updated == nil {
 		r.updated = map[string]models.OrderStatus{}
 	}
-	r.updated[id] = order.Status
+	order.Status = to
+	r.updated[id] = to
 	return nil
 }
 
@@ -50,43 +61,66 @@ func (r *fakeOrderRepo) ListOrders(context.Context, string) ([]models.Order, err
 	return nil, nil
 }
 
-type inventoryUpdate struct {
-	id       string
+type stockMove struct {
+	id       string // product hex for reserves, inventory hex for releases
 	quantity int
 }
 
-// fakeInventory stores stock keyed by the ID string it is called with and
-// records every UpdateInventory call so tests can assert which ID was used.
+// fakeInventory holds one inventory record per product. It records every
+// reserve (by product ID) and release (by inventory ID) so tests can assert
+// that stock is released to the same record it was reserved from.
 type fakeInventory struct {
-	stock       map[string]int
-	updates     []inventoryUpdate
-	rollbackErr error // returned for positive (restoring) quantity updates
+	stock       map[string]int                // product hex -> quantity
+	inventoryOf map[string]primitive.ObjectID // product hex -> inventory ID
+	reserves    []stockMove
+	releases    []stockMove
+	releaseErr  error
+}
+
+func newFakeInventory(stock map[string]int) *fakeInventory {
+	f := &fakeInventory{stock: stock, inventoryOf: map[string]primitive.ObjectID{}}
+	for product := range stock {
+		f.inventoryOf[product] = primitive.NewObjectID()
+	}
+	return f
 }
 
 func (f *fakeInventory) CreateInventory(context.Context, inventoryDTOs.CreateInventoryRequest) (*inventoryModels.Inventory, error) {
 	return nil, nil
 }
 
-func (f *fakeInventory) UpdateInventory(_ context.Context, id string, dto inventoryDTOs.UpdateInventoryRequest) (*inventoryModels.Inventory, error) {
-	f.updates = append(f.updates, inventoryUpdate{id: id, quantity: *dto.Quantity})
-	if *dto.Quantity > 0 && f.rollbackErr != nil {
-		return nil, f.rollbackErr
-	}
-	if _, ok := f.stock[id]; !ok {
-		return nil, apperrors.NewNotFoundError("inventory", id)
-	}
-	f.stock[id] += *dto.Quantity
-	return &inventoryModels.Inventory{Quantity: f.stock[id]}, nil
+func (f *fakeInventory) UpdateInventory(context.Context, string, inventoryDTOs.UpdateInventoryRequest) (*inventoryModels.Inventory, error) {
+	return nil, nil
 }
 
 func (f *fakeInventory) DeleteInventory(context.Context, string) error { return nil }
 
-func (f *fakeInventory) GetInventoryByID(_ context.Context, id string) (*inventoryModels.Inventory, error) {
-	qty, ok := f.stock[id]
-	if !ok {
-		return nil, apperrors.NewNotFoundError("inventory", id)
+func (f *fakeInventory) GetInventoryByID(context.Context, string) (*inventoryModels.Inventory, error) {
+	return nil, nil
+}
+
+func (f *fakeInventory) ReserveStock(_ context.Context, productID primitive.ObjectID, quantity int) (primitive.ObjectID, error) {
+	product := productID.Hex()
+	f.reserves = append(f.reserves, stockMove{id: product, quantity: quantity})
+	if f.stock[product] < quantity {
+		return primitive.NilObjectID, apperrors.NewConflictError("insufficient stock")
 	}
-	return &inventoryModels.Inventory{Quantity: qty}, nil
+	f.stock[product] -= quantity
+	return f.inventoryOf[product], nil
+}
+
+func (f *fakeInventory) ReleaseStock(_ context.Context, inventoryID primitive.ObjectID, quantity int) error {
+	f.releases = append(f.releases, stockMove{id: inventoryID.Hex(), quantity: quantity})
+	if f.releaseErr != nil {
+		return f.releaseErr
+	}
+	for product, id := range f.inventoryOf {
+		if id == inventoryID {
+			f.stock[product] += quantity
+			return nil
+		}
+	}
+	return mongo.ErrNoDocuments
 }
 
 type fakeProducts struct {
@@ -113,7 +147,7 @@ func (f *fakeProducts) DeleteProduct(context.Context, string) error { return nil
 
 // --- helpers -------------------------------------------------------------
 
-func newTestService(repo *fakeOrderRepo, inv *fakeInventory, products *fakeProducts) *OrderService {
+func newTestService(repo repositories.IOrderRepository, inv *fakeInventory, products *fakeProducts) *OrderService {
 	return NewOrderService(repo, inv, products, validation.NewValidator())
 }
 
@@ -147,11 +181,18 @@ func TestCreateOrder(t *testing.T) {
 			wantStock: map[string]int{productA.Hex(): 3, productB.Hex(): 2},
 		},
 		{
-			name:        "rejects insufficient stock without touching inventory",
+			name:        "rejects insufficient stock",
 			stock:       map[string]int{productA.Hex(): 1},
 			req:         orderRequest(dtos.CreateOrderItemRequest{ProductID: productA, Quantity: 2}),
 			wantErrType: apperrors.ConflictType,
 			wantStock:   map[string]int{productA.Hex(): 1},
+		},
+		{
+			name:        "releases earlier items when a later item is out of stock",
+			stock:       map[string]int{productA.Hex(): 5, productB.Hex(): 0},
+			req:         orderRequest(dtos.CreateOrderItemRequest{ProductID: productA, Quantity: 2}, dtos.CreateOrderItemRequest{ProductID: productB, Quantity: 1}),
+			wantErrType: apperrors.ConflictType,
+			wantStock:   map[string]int{productA.Hex(): 5, productB.Hex(): 0},
 		},
 		{
 			name:        "rejects unknown product",
@@ -172,7 +213,7 @@ func TestCreateOrder(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &fakeOrderRepo{}
-			inv := &fakeInventory{stock: tt.stock}
+			inv := newFakeInventory(tt.stock)
 			products := &fakeProducts{prices: map[string]float64{productA.Hex(): 10, productB.Hex(): 4.5}}
 
 			order, err := newTestService(repo, inv, products).CreateOrder(context.Background(), tt.req)
@@ -197,6 +238,11 @@ func TestCreateOrder(t *testing.T) {
 				if order.Status != models.OrderStatusPending {
 					t.Errorf("status = %q, want %q", order.Status, models.OrderStatusPending)
 				}
+				for _, item := range order.Items {
+					if item.InventoryID != inv.inventoryOf[item.ProductID.Hex()] {
+						t.Errorf("item %s inventory = %s, want the record it was reserved from", item.ProductID.Hex(), item.InventoryID.Hex())
+					}
+				}
 			}
 
 			for id, want := range tt.wantStock {
@@ -208,10 +254,10 @@ func TestCreateOrder(t *testing.T) {
 	}
 }
 
-func TestCreateOrder_RollsBackInventoryUsingHexProductID(t *testing.T) {
+func TestCreateOrder_ReleasesReservedStockWhenSavingFails(t *testing.T) {
 	product := primitive.NewObjectID()
 	repo := &fakeOrderRepo{createErr: stderrors.New("db down")}
-	inv := &fakeInventory{stock: map[string]int{product.Hex(): 5}}
+	inv := newFakeInventory(map[string]int{product.Hex(): 5})
 	products := &fakeProducts{prices: map[string]float64{product.Hex(): 10}}
 
 	_, err := newTestService(repo, inv, products).
@@ -220,18 +266,13 @@ func TestCreateOrder_RollsBackInventoryUsingHexProductID(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when the repository fails")
 	}
-
-	want := []inventoryUpdate{
-		{id: product.Hex(), quantity: -2}, // reserve
-		{id: product.Hex(), quantity: 2},  // rollback
+	wantReserves := []stockMove{{id: product.Hex(), quantity: 2}}
+	wantReleases := []stockMove{{id: inv.inventoryOf[product.Hex()].Hex(), quantity: 2}}
+	if !equalMoves(inv.reserves, wantReserves) {
+		t.Errorf("reserves = %+v, want %+v", inv.reserves, wantReserves)
 	}
-	if len(inv.updates) != len(want) {
-		t.Fatalf("inventory updates = %+v, want %+v", inv.updates, want)
-	}
-	for i := range want {
-		if inv.updates[i] != want[i] {
-			t.Errorf("update[%d] = %+v, want %+v", i, inv.updates[i], want[i])
-		}
+	if !equalMoves(inv.releases, wantReleases) {
+		t.Errorf("releases = %+v, want %+v (must target the reserved inventory record)", inv.releases, wantReleases)
 	}
 	if got := inv.stock[product.Hex()]; got != 5 {
 		t.Errorf("stock after rollback = %d, want 5", got)
@@ -241,20 +282,33 @@ func TestCreateOrder_RollsBackInventoryUsingHexProductID(t *testing.T) {
 func TestCreateOrder_SurfacesRollbackFailure(t *testing.T) {
 	product := primitive.NewObjectID()
 	createErr := stderrors.New("db down")
-	rollbackErr := stderrors.New("inventory unavailable")
+	releaseErr := stderrors.New("inventory unavailable")
 	repo := &fakeOrderRepo{createErr: createErr}
-	inv := &fakeInventory{stock: map[string]int{product.Hex(): 5}, rollbackErr: rollbackErr}
+	inv := newFakeInventory(map[string]int{product.Hex(): 5})
+	inv.releaseErr = releaseErr
 	products := &fakeProducts{prices: map[string]float64{product.Hex(): 10}}
 
 	_, err := newTestService(repo, inv, products).
 		CreateOrder(context.Background(), orderRequest(dtos.CreateOrderItemRequest{ProductID: product, Quantity: 2}))
 
-	if !stderrors.Is(err, rollbackErr) {
+	if !stderrors.Is(err, releaseErr) {
 		t.Errorf("error does not carry the rollback failure: %v", err)
 	}
 	if !stderrors.Is(err, createErr) {
 		t.Errorf("error does not carry the original create failure: %v", err)
 	}
+}
+
+func equalMoves(got, want []stockMove) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // --- status transitions --------------------------------------------------
@@ -303,7 +357,7 @@ func TestUpdateOrderStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &fakeOrderRepo{orders: map[string]*models.Order{orderID: {Status: tt.current}}}
-			svc := newTestService(repo, &fakeInventory{}, &fakeProducts{})
+			svc := newTestService(repo, newFakeInventory(nil), &fakeProducts{})
 
 			err := svc.UpdateOrderStatus(context.Background(), orderID, tt.next)
 
@@ -326,8 +380,57 @@ func TestUpdateOrderStatus(t *testing.T) {
 	}
 }
 
+func TestUpdateOrderStatus_CancelReleasesStock(t *testing.T) {
+	product := primitive.NewObjectID()
+	inv := newFakeInventory(map[string]int{product.Hex(): 3})
+	inventoryID := inv.inventoryOf[product.Hex()]
+	orderID := primitive.NewObjectID().Hex()
+	repo := &fakeOrderRepo{orders: map[string]*models.Order{orderID: {
+		Status: models.OrderStatusPending,
+		Items:  []models.OrderItem{{ProductID: product, Quantity: 2, InventoryID: inventoryID}},
+	}}}
+
+	err := newTestService(repo, inv, &fakeProducts{}).UpdateOrderStatus(context.Background(), orderID, models.OrderStatusCancelled)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if want := []stockMove{{id: inventoryID.Hex(), quantity: 2}}; !equalMoves(inv.releases, want) {
+		t.Errorf("releases = %+v, want %+v", inv.releases, want)
+	}
+	if got := inv.stock[product.Hex()]; got != 5 {
+		t.Errorf("stock after cancel = %d, want 5", got)
+	}
+}
+
+func TestUpdateOrderStatus_ConcurrentChangeIsRejected(t *testing.T) {
+	// The request read the order while it was PENDING, but another request
+	// has since moved it to PROCESSING. The guarded write must fail rather
+	// than cancel the order (and release its stock) a second time.
+	orderID := primitive.NewObjectID().Hex()
+	repo := &stalePendingRepo{&fakeOrderRepo{orders: map[string]*models.Order{orderID: {Status: models.OrderStatusProcessing}}}}
+	inv := newFakeInventory(map[string]int{})
+
+	err := newTestService(repo, inv, &fakeProducts{}).UpdateOrderStatus(context.Background(), orderID, models.OrderStatusCancelled)
+
+	if got := errorType(err); got != apperrors.ConflictType {
+		t.Fatalf("error type = %q, want %q (err: %v)", got, apperrors.ConflictType, err)
+	}
+	if len(inv.releases) != 0 {
+		t.Errorf("stock released despite the conflict: %+v", inv.releases)
+	}
+}
+
+// stalePendingRepo returns a PENDING snapshot while the stored order has
+// already moved on, simulating a request that lost a race.
+type stalePendingRepo struct{ *fakeOrderRepo }
+
+func (r *stalePendingRepo) GetOrderByID(context.Context, string) (*models.Order, error) {
+	return &models.Order{Status: models.OrderStatusPending}, nil
+}
+
 func TestUpdateOrderStatus_OrderNotFound(t *testing.T) {
-	svc := newTestService(&fakeOrderRepo{}, &fakeInventory{}, &fakeProducts{})
+	svc := newTestService(&fakeOrderRepo{}, newFakeInventory(nil), &fakeProducts{})
 
 	err := svc.UpdateOrderStatus(context.Background(), primitive.NewObjectID().Hex(), models.OrderStatusProcessing)
 

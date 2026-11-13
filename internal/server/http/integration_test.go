@@ -280,3 +280,102 @@ func TestOrdersList(t *testing.T) {
 	}
 	api.expect(api.do(http.MethodGet, "/orders/"+primitive.NewObjectID().Hex(), alice.Token, nil), http.StatusNotFound, "get missing order")
 }
+
+func createInventory(t *testing.T, api *apiClient, owner testUser, storeID, productID string, quantity int) string {
+	t.Helper()
+	resp := api.expect(api.do(http.MethodPost, "/inventories/", owner.Token, map[string]interface{}{
+		"product_id":   productID,
+		"warehouse_id": primitive.NewObjectID().Hex(),
+		"store_id":     storeID,
+		"quantity":     quantity,
+		"min_quantity": 1,
+		"max_quantity": 100,
+	}), http.StatusCreated, "create inventory")
+	return resp.data()["id"].(string)
+}
+
+func inventoryQuantity(t *testing.T, api *apiClient, user testUser, inventoryID string) (int, string) {
+	t.Helper()
+	resp := api.expect(api.do(http.MethodGet, "/inventories/"+inventoryID, user.Token, nil), http.StatusOK, "get inventory")
+	return int(resp.data()["quantity"].(float64)), resp.data()["status"].(string)
+}
+
+type orderLine struct {
+	productID string
+	quantity  int
+}
+
+func placeOrder(api *apiClient, buyer testUser, lines ...orderLine) apiResponse {
+	items := make([]map[string]interface{}, len(lines))
+	for i, l := range lines {
+		items[i] = map[string]interface{}{"productID": l.productID, "quantity": l.quantity}
+	}
+	return api.do(http.MethodPost, "/orders/", buyer.Token, map[string]interface{}{
+		"customerID":      buyer.ID,
+		"items":           items,
+		"shippingAddress": "1 Test Street",
+	})
+}
+
+func TestOrderLifecycleReservesAndReleasesStock(t *testing.T) {
+	api := newAPI(t)
+	seller := api.register("seller", "seller")
+	buyer := api.register("buyer", "buyer")
+	storeID := createStore(t, api, seller, "Seller Store")
+	book := createProduct(t, api, seller, storeID, 10)
+	pen := createProduct(t, api, seller, storeID, 2)
+	bookInventory := createInventory(t, api, seller, storeID, book, 5)
+	penInventory := createInventory(t, api, seller, storeID, pen, 0)
+
+	if qty, status := inventoryQuantity(t, api, seller, penInventory); qty != 0 || status != "out_of_stock" {
+		t.Errorf("empty inventory = %d/%s, want 0/out_of_stock", qty, status)
+	}
+
+	order := api.expect(placeOrder(api, buyer, orderLine{book, 2}), http.StatusCreated, "place order")
+	orderID := order.data()["id"].(string)
+	if total := order.data()["total_amount"]; total != 20.0 {
+		t.Errorf("order total = %v, want 20", total)
+	}
+	if qty, _ := inventoryQuantity(t, api, seller, bookInventory); qty != 3 {
+		t.Errorf("stock after order = %d, want 3", qty)
+	}
+
+	api.expect(placeOrder(api, buyer, orderLine{book, 10}), http.StatusConflict, "order more than in stock")
+	api.expect(placeOrder(api, buyer, orderLine{book, 1}, orderLine{pen, 1}), http.StatusConflict, "order with one item out of stock")
+	if qty, _ := inventoryQuantity(t, api, seller, bookInventory); qty != 3 {
+		t.Errorf("stock after rejected orders = %d, want 3 (partial reservation must be released)", qty)
+	}
+
+	list := api.expect(api.do(http.MethodGet, "/orders/?customer_id="+buyer.ID, buyer.Token, nil), http.StatusOK, "list orders")
+	if orders := list.Body["data"].([]interface{}); len(orders) != 1 {
+		t.Errorf("listed %d orders, want 1", len(orders))
+	}
+
+	api.expect(api.do(http.MethodPatch, "/orders/"+orderID+"/status", buyer.Token, "CANCELLED"), http.StatusOK, "cancel order")
+	if qty, status := inventoryQuantity(t, api, seller, bookInventory); qty != 5 || status != "in_stock" {
+		t.Errorf("stock after cancel = %d/%s, want 5/in_stock", qty, status)
+	}
+	api.expect(api.do(http.MethodPatch, "/orders/"+orderID+"/status", buyer.Token, "CANCELLED"), http.StatusBadRequest, "cancel twice")
+}
+
+func TestInventoryUpdateAndDelete(t *testing.T) {
+	api := newAPI(t)
+	seller := api.register("seller", "seller")
+	storeID := createStore(t, api, seller, "Seller Store")
+	product := createProduct(t, api, seller, storeID, 10)
+	inventoryID := createInventory(t, api, seller, storeID, product, 5)
+
+	api.expect(api.do(http.MethodPatch, "/inventories/"+inventoryID, seller.Token, map[string]int{"quantity": 1}), http.StatusOK, "update quantity")
+	if qty, status := inventoryQuantity(t, api, seller, inventoryID); qty != 1 || status != "low_stock" {
+		t.Errorf("after update = %d/%s, want 1/low_stock", qty, status)
+	}
+	got := api.expect(api.do(http.MethodGet, "/inventories/"+inventoryID, seller.Token, nil), http.StatusOK, "get inventory")
+	if got.data()["product_id"] != product {
+		t.Errorf("update changed product_id to %v", got.data()["product_id"])
+	}
+	api.expect(api.do(http.MethodPatch, "/inventories/"+inventoryID, seller.Token, map[string]int{"quantity": -1}), http.StatusBadRequest, "negative quantity")
+
+	api.expect(api.do(http.MethodDelete, "/inventories/"+inventoryID, seller.Token, nil), http.StatusOK, "delete inventory")
+	api.expect(api.do(http.MethodDelete, "/inventories/"+inventoryID, seller.Token, nil), http.StatusNotFound, "delete inventory twice")
+	api.expect(api.do(http.MethodGet, "/inventories/"+inventoryID, seller.Token, nil), http.StatusNotFound, "get deleted inventory")
+}

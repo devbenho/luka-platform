@@ -9,8 +9,8 @@ type CreateInventoryRequest struct {
 	ProductID   primitive.ObjectID `json:"product_id" validate:"required"`
 	WarehouseID primitive.ObjectID `json:"warehouse_id" validate:"required"`
 	StoreID     primitive.ObjectID `json:"store_id" validate:"required"`
-	Quantity    int                `json:"quantity" validate:"required,gte=0"`
-	MinQuantity int                `json:"min_quantity" validate:"required,gte=0"`
+	Quantity    int                `json:"quantity" validate:"gte=0"`
+	MinQuantity int                `json:"min_quantity" validate:"gte=0"`
 	MaxQuantity int                `json:"max_quantity" validate:"required,gtfield=MinQuantity"`
 }
 
