@@ -34,7 +34,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "auth"
+                    "users"
                 ],
                 "summary": "Login a user",
                 "parameters": [
@@ -63,6 +63,52 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/register": {
+            "post": {
+                "description": "Register a new user with the provided details",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Register a new user",
+                "parameters": [
+                    {
+                        "description": "User details",
+                        "name": "user",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dtos.CreateUserRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/utils.Response"
                         }
@@ -465,7 +511,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Get a list of orders, optionally filtered by customer ID",
+                "description": "List the authenticated user's orders",
                 "produces": [
                     "application/json"
                 ],
@@ -476,7 +522,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Filter orders by customer ID",
+                        "description": "Must be the caller's own ID if given",
                         "name": "customer_id",
                         "in": "query"
                     }
@@ -955,7 +1001,51 @@ const docTemplate = `{
                     }
                 }
             },
-            "put": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete a store with the provided ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "stores"
+                ],
+                "summary": "Delete a store",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Store ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    }
+                }
+            },
+            "patch": {
                 "security": [
                     {
                         "BearerAuth": []
@@ -1005,96 +1095,6 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Delete a store with the provided ID",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "stores"
-                ],
-                "summary": "Delete a store",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Store ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/auth/register": {
-            "post": {
-                "description": "Register a new user with the provided details",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "auth"
-                ],
-                "summary": "Register a new user",
-                "parameters": [
-                    {
-                        "description": "User details",
-                        "name": "user",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/dtos.CreateUserRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/utils.Response"
                         }
@@ -1283,9 +1283,7 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "max_quantity",
-                "min_quantity",
                 "product_id",
-                "quantity",
                 "store_id",
                 "warehouse_id"
             ],
@@ -1330,14 +1328,10 @@ const docTemplate = `{
         "dtos.CreateOrderRequest": {
             "type": "object",
             "required": [
-                "customerID",
                 "items",
                 "shippingAddress"
             ],
             "properties": {
-                "customerID": {
-                    "type": "string"
-                },
                 "items": {
                     "type": "array",
                     "minItems": 1,
@@ -1447,20 +1441,17 @@ const docTemplate = `{
         "dtos.UpdateInventoryRequest": {
             "type": "object",
             "properties": {
-                "product_id": {
-                    "type": "string"
+                "max_quantity": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "min_quantity": {
+                    "type": "integer",
+                    "minimum": 0
                 },
                 "quantity": {
                     "type": "integer",
                     "minimum": 0
-                },
-                "status": {
-                    "type": "string",
-                    "enum": [
-                        "in_stock",
-                        "out_of_stock",
-                        "low_stock"
-                    ]
                 }
             }
         },
@@ -1483,13 +1474,11 @@ const docTemplate = `{
                     }
                 },
                 "name": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1
                 },
                 "price": {
                     "type": "number"
-                },
-                "store_id": {
-                    "type": "string"
                 }
             }
         },
@@ -1500,7 +1489,8 @@ const docTemplate = `{
             ],
             "properties": {
                 "name": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1
                 }
             }
         },
@@ -1535,11 +1525,18 @@ const docTemplate = `{
                 "message": {
                     "type": "string"
                 },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
                 "status": {
                     "type": "integer"
                 },
                 "success": {
                     "type": "boolean"
+                },
+                "type": {
+                    "type": "string"
                 }
             }
         }

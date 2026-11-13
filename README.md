@@ -46,41 +46,93 @@ A modern e-commerce platform built with Go and Next.js, featuring a robust backe
 
 ### Prerequisites
 - Go 1.23 or later
-- Node.js 18+ and npm
-- MongoDB
-- Docker (optional)
+- Node.js 18+ and npm (frontend only)
+- MongoDB 4.4+ running as a **replica set**: orders use multi-document transactions. A single-node replica set is fine for development. The API refuses to start against a standalone `mongod`.
+- Docker (optional; the easiest way to get MongoDB)
 
-### Installation
+### Get the code
 
-1. Clone the repository
 ```bash
 git clone https://github.com/devbenho/luka-platform.git
 cd luka-platform
 ```
 
-2. Backend Setup
+### Configuration
+
+The API reads these environment variables. It also loads a `.env` file from the working directory if one exists; variables already set in the environment take precedence.
+
+| Variable | Required | Description |
+|---|---|---|
+| `PORT` | yes | HTTP port, e.g. `2707` |
+| `MONGO_URI` | yes | MongoDB connection string, e.g. `mongodb://localhost:27017/?directConnection=true` |
+| `DB_NAME` | yes | Database name, e.g. `luka` |
+| `JWT_SECRET` | yes | Secret used to sign access tokens. Use a long random value, e.g. `openssl rand -hex 32`. |
+| `JWT_TYPE` | no | Token type label |
+| `ALLOWED_ORIGINS` | no | CORS origins |
+
+If a required variable is missing, the API exits at startup.
+
+### Run with Docker Compose
+
+This starts MongoDB as a single-node replica set, then the API on port 2707:
+
 ```bash
-# Install dependencies
-go mod download
-
-# Set up environment variables
-cp .env.example .env
-# Edit .env with your configuration
-
-# Run the application
-go run ./cmd/...
+export JWT_SECRET=$(openssl rand -hex 32)
+docker compose up
 ```
 
-3. Frontend Setup
+- Swagger UI: http://localhost:2707/swagger/index.html
+- Health check: `curl localhost:2707/ping`
+
+### Run locally
+
+1. Start MongoDB as a single-node replica set:
+
+```bash
+docker run -d --name luka-mongo -p 27017:27017 mongo:7 --replSet rs0 --bind_ip_all
+```
+
+```bash
+docker exec luka-mongo mongosh --quiet --eval "rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'localhost:27017'}]})"
+```
+
+2. Configure and run the API:
+
+```bash
+cp .env.example .env   # then set the variables from the table above
+go run ./cmd/api
+```
+
+### Tests
+
+Unit tests need no database:
+
+```bash
+go test ./...
+```
+
+Integration tests drive the real HTTP routes against MongoDB, each run in a throwaway database. They need the replica set from "Run locally":
+
+```bash
+LUKA_TEST_MONGO_URI="mongodb://localhost:27017/?directConnection=true" go test -tags integration ./...
+```
+
+CI (`.github/workflows/go.yml`) runs `go vet`, the unit tests with `-race`, and the integration tests against a MongoDB replica set on every pull request.
+
+### API documentation
+
+The Swagger spec in `docs/` is generated from the handler annotations. Regenerate it after changing handlers or DTOs:
+
+```bash
+go run github.com/swaggo/swag/cmd/swag@v1.16.3 init -g cmd/api/main.go -o docs
+```
+
+### Frontend
+
 ```bash
 cd web
 npm install
 npm run dev
-```
-
-### Docker Setup
-```bash
-docker-compose up
 ```
 
 ## 🔍 Project Structure
@@ -112,7 +164,6 @@ docker-compose up
 5. Implement background job processing
 6. Add more robust error handling and recovery
 7. Implement database migrations
-8. Add unit and integration tests
 
 ### Frontend Improvements
 1. Implement state management (Redux/Context)

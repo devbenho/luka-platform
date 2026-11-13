@@ -103,7 +103,7 @@ func (h *StoreHandler) GetById(c *gin.Context) {
 // @Failure 404 {object} utils.Response
 // @Failure 500 {object} utils.Response
 // @Security BearerAuth
-// @Router /stores/{id} [put]
+// @Router /stores/{id} [patch]
 func (h *StoreHandler) Update(c *gin.Context) {
 	id := c.Param("id")
 	userID, _ := middleware.UserID(c)

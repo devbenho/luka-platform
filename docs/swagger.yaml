@@ -47,9 +47,7 @@ definitions:
         type: string
     required:
     - max_quantity
-    - min_quantity
     - product_id
-    - quantity
     - store_id
     - warehouse_id
     type: object
@@ -65,8 +63,6 @@ definitions:
     type: object
   dtos.CreateOrderRequest:
     properties:
-      customerID:
-        type: string
       items:
         items:
           $ref: '#/definitions/dtos.CreateOrderItemRequest'
@@ -77,7 +73,6 @@ definitions:
       shippingAddress:
         type: string
     required:
-    - customerID
     - items
     - shippingAddress
     type: object
@@ -148,17 +143,15 @@ definitions:
     type: object
   dtos.UpdateInventoryRequest:
     properties:
-      product_id:
-        type: string
+      max_quantity:
+        minimum: 0
+        type: integer
+      min_quantity:
+        minimum: 0
+        type: integer
       quantity:
         minimum: 0
         type: integer
-      status:
-        enum:
-        - in_stock
-        - out_of_stock
-        - low_stock
-        type: string
     type: object
   dtos.UpdateProductRequest:
     properties:
@@ -173,15 +166,15 @@ definitions:
           type: string
         type: array
       name:
+        minLength: 1
         type: string
       price:
         type: number
-      store_id:
-        type: string
     type: object
   dtos.UpdateStoreRequest:
     properties:
       name:
+        minLength: 1
         type: string
     required:
     - name
@@ -208,10 +201,15 @@ definitions:
         type: string
       message:
         type: string
+      metadata:
+        additionalProperties: true
+        type: object
       status:
         type: integer
       success:
         type: boolean
+      type:
+        type: string
     type: object
 host: localhost:2707
 info:
@@ -255,6 +253,36 @@ paths:
           schema:
             $ref: '#/definitions/utils.Response'
       summary: Login a user
+      tags:
+      - users
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Register a new user with the provided details
+      parameters:
+      - description: User details
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/dtos.CreateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Register a new user
       tags:
       - users
   /categories:
@@ -505,9 +533,9 @@ paths:
       - inventories
   /orders:
     get:
-      description: Get a list of orders, optionally filtered by customer ID
+      description: List the authenticated user's orders
       parameters:
-      - description: Filter orders by customer ID
+      - description: Must be the caller's own ID if given
         in: query
         name: customer_id
         type: string
@@ -846,7 +874,7 @@ paths:
       summary: Get a store by ID
       tags:
       - stores
-    put:
+    patch:
       consumes:
       - application/json
       description: Update a store with the provided details
@@ -886,36 +914,6 @@ paths:
       summary: Update a store
       tags:
       - stores
-  /auth/register:
-    post:
-      consumes:
-      - application/json
-      description: Register a new user with the provided details
-      parameters:
-      - description: User details
-        in: body
-        name: user
-        required: true
-        schema:
-          $ref: '#/definitions/dtos.CreateUserRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/utils.Response'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/utils.Response'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/utils.Response'
-      summary: Register a new user
-      tags:
-      - auth
   /users/{id}:
     delete:
       description: Delete user by ID
