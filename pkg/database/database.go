@@ -2,6 +2,8 @@ package database
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -15,6 +17,7 @@ const DatabaseTimeout = 5 * time.Second
 type IDatabase interface {
 	GetDB() *mongo.Database
 	WithTransaction(ctx context.Context, function func(sessCtx mongo.SessionContext) error) error
+	Transactor
 	Create(ctx context.Context, collection string, doc interface{}) error
 	CreateInBatches(ctx context.Context, collection string, docs []interface{}) error
 	Update(ctx context.Context, collection string, filter, update interface{}) error
@@ -24,6 +27,13 @@ type IDatabase interface {
 	FindOne(ctx context.Context, collection string, filter, result interface{}) error
 	Find(ctx context.Context, collection string, filter, result interface{}) error
 	Count(ctx context.Context, collection string, filter interface{}) (int64, error)
+}
+
+// Transactor runs fn inside a multi-document transaction: every write made
+// with the ctx passed to fn commits together or not at all. fn may be called
+// more than once if the transaction is retried after a transient error.
+type Transactor interface {
+	RunInTransaction(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
 type Database struct {
@@ -46,11 +56,32 @@ func NewDatabase(uri, dbName string) (*Database, error) {
 		return nil, err
 	}
 
+	if err := requireReplicaSet(ctx, client); err != nil {
+		return nil, err
+	}
+
 	database := client.Database(dbName)
 	return &Database{
 		client:   client,
 		database: database,
 	}, nil
+}
+
+// requireReplicaSet fails fast when the server cannot run transactions
+// (a standalone mongod), instead of failing on the first order.
+func requireReplicaSet(ctx context.Context, client *mongo.Client) error {
+	var hello struct {
+		SetName string `bson:"setName"`
+		Msg     string `bson:"msg"`
+	}
+	if err := client.Database("admin").RunCommand(ctx, bson.D{{Key: "hello", Value: 1}}).Decode(&hello); err != nil {
+		return fmt.Errorf("checking MongoDB topology: %w", err)
+	}
+	if hello.SetName == "" && hello.Msg != "isdbgrid" {
+		return errors.New("MongoDB must run as a replica set (or sharded cluster) because orders use transactions; " +
+			"for local development start mongod with --replSet rs0 and run rs.initiate() (see README)")
+	}
+	return nil
 }
 
 func (d *Database) GetDB() *mongo.Database {
@@ -71,6 +102,12 @@ func (d *Database) WithTransaction(ctx context.Context, function func(sessCtx mo
 
 	_, err = session.WithTransaction(ctx, callback)
 	return err
+}
+
+func (d *Database) RunInTransaction(ctx context.Context, fn func(ctx context.Context) error) error {
+	return d.WithTransaction(ctx, func(sessCtx mongo.SessionContext) error {
+		return fn(sessCtx)
+	})
 }
 
 func (d *Database) Create(ctx context.Context, collection string, doc interface{}) error {
